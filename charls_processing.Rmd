@@ -1456,4 +1456,6 @@ for (i in 1:nrow(merged_charls)) {
   }
 }
 save(merged_charls, file = "output/merged_charls.RData")
+save(seq_hukou, file = "output/seq_hukou.RData")
+save(seq_work, file = "output/seq_work.RData")
 ```
