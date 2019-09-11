@@ -75,7 +75,7 @@ packages <- lapply(
 ```
 
 ```{r set up working directory, echo=FALSE, warning=FALSE}
-setwd("C:/Users/Administrator/Box/CHARLS")
+setwd("C:/Users/Administrator/Documents/GitHub/parental-wealth-impact")
 Sys.setlocale("LC_TIME", "C")#Set to debug date transformation
 Sys.setenv(TZ="Europe/Berlin")
 select <- dplyr::select
