@@ -7,4 +7,5 @@
 *.RData
 *.pdf
 *.rar
+*.doc
 !presentation_ICSA_2019_NYU.pdf
