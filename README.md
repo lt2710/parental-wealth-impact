@@ -26,4 +26,4 @@ Using sequence analysis and various regressions to build models on wealth impact
  
  - Such transmission might constitute part of a chain from the political/institutional advantage at parental generation to the converted economic power, then to the persistence of it in the offpsring
  
- -The mechanism is embedded in the process of China's macro-structural social transformation in the past decades, which would reveal how the priviledged manage to pass on their resources
+ - The mechanism is embedded in the process of China's macro-structural social transformation in the past decades, which would reveal how the priviledged manage to pass on their resources
