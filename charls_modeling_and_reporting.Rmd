@@ -116,7 +116,7 @@ CHARLS
  - Home value only include the current residing home
 
 ##dta_lm_parent and dta_lm_child
-```{r, echo=FALSE, warning=FALSE}
+```{r}
 dta_lm_child <-
   merged_charls %>% filter(
     urban_child %in% c(
@@ -191,11 +191,31 @@ dta_lm_child$hukou_2gen[dta_lm_child$hukou == "NAg" &
                           dta_lm_child$hukou_child == "1 Agricultural Hukou"] <- "1 one urban"
 dta_lm_child$hukou_2gen[dta_lm_child$hukou == "NAg" &
                           dta_lm_child$hukou_child == "2 Non-Agricultural Hukou"] <- "2 both urban"
-write.csv(dta_lm_child, "output/dta_lm_child.csv")
 ```
 
 ##Child education
-```{r, echo=FALSE, warning=FALSE}
+```{r}
+lm_edu1 <- lm(
+  education_years_child ~
+    #children
+    age_child +
+    gender_child +
+    onlychild +
+    #father
+    education_years +
+    party +
+    hukou +
+    jobcat+
+    (homevalue + 1) %>% log()+
+    (asset_fin + 1) %>% log()+
+    (asset_land + asset_durable_fixed + 1) %>% log()
+  #Transfers
+  #marriagehome_child
+  #transfer_child+
+  ,
+  data = dta_lm_child
+)
+
 lm_edu2 <- lm(
   education_years_child ~
     #children
@@ -206,8 +226,10 @@ lm_edu2 <- lm(
     education_years +
     party +
     hukou +
-    jobcat +
-    (net_worth_real + 1) %>% log()
+    jobcat+
+    (homevalue + 1) %>% log()+
+    (asset_fin + 1) %>% log()+
+    (asset_land + asset_durable_fixed + 1) %>% log()
   #Transfers
   #marriagehome_child
   #transfer_child+
@@ -226,7 +248,9 @@ lm_edu3 <- lm(
     party +
     hukou +
     jobcat +
-    (net_worth_real + 1) %>% log()
+    (homevalue + 1) %>% log()+
+    (asset_fin + 1) %>% log()+
+    (asset_land + asset_durable_fixed + 1) %>% log()
   #Transfers
   #marriagehome_child
   #transfer_child+
@@ -245,7 +269,9 @@ lm_edu4 <- lm(
     party +
     hukou +
     jobcat +
-    (net_worth_real + 1) %>% log()
+    (homevalue + 1) %>% log()+
+    (asset_fin + 1) %>% log()+
+    (asset_land + asset_durable_fixed + 1) %>% log()
   #Transfers
   #marriagehome_child
   #transfer_child+
@@ -253,11 +279,13 @@ lm_edu4 <- lm(
   data = dta_lm_child %>% filter(tier_child %in% c("tier4"))
 )
 export_summs(
+  lm_edu1,
   lm_edu2,
   lm_edu3,
   lm_edu4,
   error_pos = "same",
   model.names = c(
+    "all cities",
     "Tier 1/1.5/2 cities",
     "Tier 3 cities",
     "Tier 4 cities"
@@ -281,8 +309,12 @@ export_summs(
       "jobcatnAGout",
     "Non-agricultural within system job (base: agricultural)" =
       "jobcatnAGin",
-    "Parental: net worth (logged, sd=1.3)" =
-      "(net_worth_real + 1) %>% log()"
+    "Parental: home (logged, sd=1.3)" =
+      "(homevalue + 1) %>% log()",
+    "Parental: fin (logged, sd=1.3)" =
+      "(asset_fin + 1) %>% log()",
+    "Parental: durable and land (logged, sd=1.3)" =
+      "(asset_land + asset_durable_fixed + 1) %>% log()"
   ),
   to.file = "Word",
   file.name = "output/education_child_by_city_tier.docx"
@@ -459,6 +491,32 @@ export_summs(
 
 ##Child homevalue: city tiers in different models
 ```{r}
+rq_0 <- rq(
+  homevalue_child ~
+    #children
+    age_child +
+    gender_child +
+    onlychild +
+    marriage_child +
+    education_years_child +
+    hukou_child +
+    party_child +
+    mgt +
+    (income_child+50)%>%log() +
+    #father
+    education_years +
+    jobcat +
+    hukou +
+    party +
+    (homevalue + 1) %>% log()+
+    (asset_fin + 1) %>% log()+
+    (asset_land + asset_durable_fixed + 1) %>% log()+
+    #Transfers
+    marriagehome_child
+  ,
+  data = dta_lm_child %>% filter(homevalue_child > 0)
+)
+
 rq_12 <- rq(
   homevalue_child ~
     #children
@@ -476,7 +534,9 @@ rq_12 <- rq(
     jobcat +
     hukou +
     party +
-    (net_worth_real + 1) %>% log() +
+    (homevalue + 1) %>% log()+
+    (asset_fin + 1) %>% log()+
+    (asset_land + asset_durable_fixed + 1) %>% log()+
     #Transfers
     marriagehome_child
   ,
@@ -501,7 +561,9 @@ rq_3 <- rq(
     jobcat +
     hukou +
     party +
-    (net_worth_real + 1) %>% log() +
+    (homevalue + 1) %>% log()+
+    (asset_fin + 1) %>% log()+
+    (asset_land + asset_durable_fixed + 1) %>% log()+
     #Transfers
     marriagehome_child
   ,
@@ -526,7 +588,9 @@ rq_4 <- rq(
     jobcat +
     hukou +
     party +
-    (net_worth_real + 1) %>% log() +
+    (homevalue + 1) %>% log()+
+    (asset_fin + 1) %>% log()+
+    (asset_land + asset_durable_fixed + 1) %>% log()+
     #Transfers
     marriagehome_child
   ,
@@ -534,11 +598,13 @@ rq_4 <- rq(
                                  tier_child %in% c("tier4"))
 )
 
-export_summs(rq_12,
+export_summs(rq_0,
+             rq_12,
              rq_3,
              rq_4,
              error_pos = "same",
-             model.names = c("Tier 1/1.5/2 cities",
+             model.names = c("All cities",
+                             "Tier 1/1.5/2 cities",
                              "Tier 3 cities",
                              "Tier 4 cities"),
              to.file = "Word",
@@ -573,8 +639,12 @@ export_summs(rq_12,
       "jobcatnAGout",
     "Non-agricultural within system job (base: agricultural)" =
       "jobcatnAGin",
-    "Parental: net worth (logged, sd=1.3)" =
-      "(net_worth_real + 1) %>% log()",
+    "Parental: home (logged, sd=1.3)" =
+      "(homevalue + 1) %>% log()",
+    "Parental: fin (logged, sd=1.3)" =
+      "(asset_fin + 1) %>% log()",
+    "Parental: durable and land (logged, sd=1.3)" =
+      "(asset_land + asset_durable_fixed + 1) %>% log()",
     "Gifted home upon marriage (base: no gifted home)" =
       "marriagehome_childParent buy marriage home"
   ),
@@ -584,6 +654,33 @@ export_summs(rq_12,
 #Children home ownership regression
 ###ownership
 ```{r}
+glm_1 <- glm(
+  home_child ~
+    #children
+    age_child +
+    gender_child +
+    onlychild +
+    marriage_child +
+    education_years_child +
+    hukou_child +
+    party_child +
+    mgt +
+    (income_child+50)%>%log() +
+    #father
+    education_years +
+    jobcat +
+    hukou +
+    party +
+    (homevalue + 1) %>% log()+
+    (asset_fin + 1) %>% log()+
+    (asset_land + asset_durable_fixed + 1) %>% log()+
+    #Transfers
+    marriagehome_child
+  ,
+  data = dta_lm_child,
+  family = binomial(link = "logit")
+)
+
 glm_2 <- glm(
   home_child ~
     #children
@@ -601,7 +698,9 @@ glm_2 <- glm(
     jobcat +
     hukou +
     party +
-    (net_worth_real + 1) %>% log() +
+    (homevalue + 1) %>% log()+
+    (asset_fin + 1) %>% log()+
+    (asset_land + asset_durable_fixed + 1) %>% log()+
     #Transfers
     marriagehome_child
   ,
@@ -626,7 +725,9 @@ glm_3 <- glm(
     jobcat +
     hukou +
     party +
-    (net_worth_real + 1) %>% log() +
+    (homevalue + 1) %>% log()+
+    (asset_fin + 1) %>% log()+
+    (asset_land + asset_durable_fixed + 1) %>% log()+
     #Transfers
     marriagehome_child
   ,
@@ -651,7 +752,9 @@ glm_4 <- glm(
     jobcat +
     hukou +
     party +
-    (net_worth_real + 1) %>% log() +
+    (homevalue + 1) %>% log()+
+    (asset_fin + 1) %>% log()+
+    (asset_land + asset_durable_fixed + 1) %>% log()+
     #Transfers
     marriagehome_child
   ,
@@ -660,11 +763,13 @@ glm_4 <- glm(
 )
 
 export_summs(
+  glm_1,
   glm_2,
   glm_3,
   glm_4,
   error_pos = "same",
-             model.names = c("Tier 1/1.5/2 cities",
+             model.names = c("All cities",
+                             "Tier 1/1.5/2 cities",
                              "Tier 3 cities",
                              "Tier 4 cities"),
              to.file = "Word",
@@ -699,8 +804,12 @@ export_summs(
       "jobcatnAGout",
     "Non-agricultural within system job (base: agricultural)" =
       "jobcatnAGin",
-    "Parental: net worth (logged, sd=1.3)" =
-      "(net_worth_real + 1) %>% log()",
+    "Parental: home (logged, sd=1.3)" =
+      "(homevalue + 1) %>% log()",
+    "Parental: fin (logged, sd=1.3)" =
+      "(asset_fin + 1) %>% log()",
+    "Parental: durable and land (logged, sd=1.3)" =
+      "(asset_land + asset_durable_fixed + 1) %>% log()",
     "Gifted home upon marriage (base: no gifted home)" =
       "marriagehome_childParent buy marriage home"
   ),
@@ -774,7 +883,9 @@ lm_inc3 <- lm(
     party +
     education_years +
     jobcat +
-    (net_worth_real + 1) %>% log()
+    (homevalue + 1) %>% log()+
+    (asset_fin + 1) %>% log()+
+    (asset_land + asset_durable_fixed + 1) %>% log()
   ,
   data = dta_lm_child)
 export_summs(lm_inc1,
@@ -813,11 +924,157 @@ export_summs(lm_inc1,
       "jobcatnAGout",
     "Non-agricultural within system job (base: agricultural)" =
       "jobcatnAGin",
-    "Parental: net worth (logged, sd=1.3)" =
-      "(net_worth_real + 1) %>% log()"
+    "Parental: home (logged, sd=1.3)" =
+      "(homevalue + 1) %>% log()",
+    "Parental: fin (logged, sd=1.3)" =
+      "(asset_fin + 1) %>% log()",
+    "Parental: durable and land (logged, sd=1.3)" =
+      "(asset_land + asset_durable_fixed + 1) %>% log()"
   ),
              file.name = "output/income_child_stepwise.docx")
 ```
+
+with tiers
+
+```{r}
+lm_inc0a <- lm(
+  (income_child+50)%>%log() ~
+    #children
+    age_child +
+    gender_child+
+    onlychild +
+    marriage_child +
+    hukou_child+
+    party_child +
+    education_years_child +
+    mgt+
+    #father
+    hukou +
+    party +
+    education_years +
+    jobcat +
+    (homevalue + 1) %>% log()+
+    (asset_fin + 1) %>% log()+
+    (asset_land + asset_durable_fixed + 1) %>% log()
+  ,
+  data = dta_lm_child
+  )
+
+lm_inc1a <- lm(
+  (income_child+50)%>%log() ~
+    #children
+    age_child +
+    gender_child+
+    onlychild +
+    marriage_child +
+    hukou_child+
+    party_child +
+    education_years_child +
+    mgt+
+    #father
+    hukou +
+    party +
+    education_years +
+    jobcat +
+    (homevalue + 1) %>% log()+
+    (asset_fin + 1) %>% log()+
+    (asset_land + asset_durable_fixed + 1) %>% log()
+  ,
+  data = dta_lm_child %>% filter(tier_child %in% c("tier1","tier2"))
+  )
+
+lm_inc2a <- lm(
+  (income_child+50)%>%log() ~
+    #children
+    age_child +
+    gender_child+
+    onlychild +
+    marriage_child +
+    hukou_child+
+    party_child +
+    education_years_child +
+    mgt+
+    #father
+    hukou +
+    party +
+    education_years +
+    jobcat +
+    (homevalue + 1) %>% log()+
+    (asset_fin + 1) %>% log()+
+    (asset_land + asset_durable_fixed + 1) %>% log()
+  ,
+  data = dta_lm_child %>% filter(tier_child %in% c("tier3"))
+  )
+lm_inc3a <- lm(
+  (income_child+50)%>%log() ~
+    #children
+    age_child +
+    gender_child+
+    onlychild +
+    marriage_child +
+    hukou_child+
+    party_child +
+    education_years_child +
+    mgt+
+    #father
+    hukou +
+    party +
+    education_years +
+    jobcat +
+    (homevalue + 1) %>% log()+
+    (asset_fin + 1) %>% log()+
+    (asset_land + asset_durable_fixed + 1) %>% log()
+  ,
+  data = dta_lm_child %>% filter(tier_child %in% c("tier4"))
+  )
+export_summs(lm_inc0a,
+             lm_inc1a,
+             lm_inc2a,
+             lm_inc3a,
+             to.file = "Word",
+                          model.names = c("All cities",
+                                          "Tier 1/1.5/2",
+                                          "Tier 3",
+                                          "Tier 4"),
+               coefs = c(
+    "Child: Age (years)" = "age_child",
+    "Male (base: female)" = "gender_childMale",
+    "Only child (base: multiple children family)" =
+      "onlychildonly child",
+    "Married (based: unmarried)" = 
+      "marriage_childMarried",
+    "Years of education" = 
+      "education_years_child",
+    "Non-agricultural hukou (base: agricultural hukou)" = 
+      "hukou_child2 Non-Agricultural Hukou",
+    "Party member (base: non-party member)" = 
+      "party_childParty member",
+    "Managerial elites (state/private sector)" = 
+      "mgtManagerial elites",
+    "Father: years of schooling (unit: year)" =
+      "education_years",
+    "Party membership (base: non-party member)" =
+      "partyParty member",
+    "Achieved non-agriculrural hukou (base: agricultural)" =
+      "hukouAg-NAg",
+    "Non-agriculrural hukou (base: agricultural)" =
+      "hukouNAg",
+    "Mixed employment trajectory (base: agricultural)" =
+      "jobcatmixed",
+    "Non-agricultural outside system job (base: agricultural)" =
+      "jobcatnAGout",
+    "Non-agricultural within system job (base: agricultural)" =
+      "jobcatnAGin",
+    "Parental: home (logged, sd=1.3)" =
+      "(homevalue + 1) %>% log()",
+    "Parental: fin (logged, sd=1.3)" =
+      "(asset_fin + 1) %>% log()",
+    "Parental: durable and land (logged, sd=1.3)" =
+      "(asset_land + asset_durable_fixed + 1) %>% log()"
+  ),
+             file.name = "output/income_child_stepwise.docx")
+```
+
 
 ---
 ##Landscape of wealth studies
