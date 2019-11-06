@@ -1255,23 +1255,23 @@ child_2015$education_years[child_2015$education == "11 Post-graduate, doctoral d
 child_2015$education[child_2015$education == "1 No formal education illiterate" |
                        child_2015$education == "2 Did not finish primary school but capable of reading or writing" |
                        child_2015$education == "3 Sishu/home school" |
-                       child_2015$education == "4 Elementary school" |
-                       child_2015$education == "5 Middle school"] <- 1
-child_2015$education[child_2015$education == "6 High school"] <- 2
-child_2015$education[child_2015$education == "7 Vocational school" |
-                       child_2015$education == "8 Two-/Three-Year College / Associate degree"] <-
+                       child_2015$education == "4 Elementary school"] <- 1
+child_2015$education[child_2015$education == "5 Middle school"] <- 2
+child_2015$education[child_2015$education == "6 High school"|
+                       child_2015$education == "7 Vocational school"] <-
   3
-child_2015$education[child_2015$education == "9 Four-Year College / Bachelors degree" |
+child_2015$education[child_2015$education == "8 Two-/Three-Year College / Associate degree"|
+                       child_2015$education == "9 Four-Year College / Bachelors degree" |
                        child_2015$education == "10 Post-graduate, Masters degree" |
                        child_2015$education == "11 Post-graduate, doctoral degree/Ph.D."] <-
   4
 child_2015$education <- child_2015$education %>% factor(
   levels = c(1:4),
   labels = c(
-    "1 Middle school and below",
-    "2 Middle and high school",
-    "3 Vocational school/some college",
-    "4 Bachelor and above"
+    "1 Primary school and below",
+    "2 Middle school",
+    "3 High/vocational school",
+    "4 College and above"
   )
 )
 ```
