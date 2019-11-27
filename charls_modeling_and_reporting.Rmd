@@ -1,6 +1,6 @@
 ---
-title: "Impact of parental resources on living standard potential"
-subtitle: "Education, home ownership and housing wealth in post-socialist China"
+title: "Childrens' education attainment and parental wealth"
+subtitle: "Impact of parental resources on living standard potential in China"
 author: "Langyi Tian, Columbia University"
 date: "Aug 2019"
 output:
@@ -1433,152 +1433,18 @@ jtools::plot_summs(
  - Insurance mechanism: wealth mitigates the risks involved in decisions about specific educational transitions
  
  - Purchasing mechanism: purchase of educational goods/services
- 
----
-##Housing sector in urban China
- - Used to serve as public welfare
- 
- - Radically privatized and marketized since 1990s ("Public housing into private assets")
- 
- - Expansion and appreciation over time contributed to much of present wealth inequality
 
- - Linked with wealth, living standard (education/healthcare resources), labor force participation, class identity (gated community), etc.
- 
- - Qualitative studies in major cities show significant patterns of housing support from parental resources among middle class households
-
----
-##Parental household net Worth
- - Averaging ¥170k, housing asset as majority
-
- - Strong correlation with offpsring housing wealth
-Home value of children homeowners averages 440k for parental households with net worth<160k; is 1,050k for parents holding >500k of net worth
-
- - No direct relationship with offpsring ownership rate. Potential reason: Possession of homes of different neighbourhood and location
-
-##home gift upon marriage
- - Among home owners, 10% was gifted a home upon marriage
- 
- - The only child (36%) and male (23%) homeowners are much more likely to have received gifted home from parents than non-only child (10%) and female (2%) owners
- 
- - Average market value of gifted home is 230k (inflation unadjusted), significant considering median household income among children is between 30k and 50k
- 
- - Small difference between gifted homeowners (620k) and achieving homeowners (560k)
- 
----
-```{r,eval=FALSE}
-jtools::plot_summs(
-  glm_2,
-  glm_3,
-  glm_4,
-  coefs = c(
-    "Child: Male (base: female)" = "gender_childMale",
-    "Only child (base: multiple children family)" =
-      "onlychildonly child",
-    "Residence in main city (base: suburban)" =
-      "urban_child3 Main City Zone",
-    "Non-agricultural hukou (base: agricultural)" =
-      "hukou_child2 Non-Agricultural Hukou",
-    "Political/economic elite (base: peasants)" =
-      "jobcat_child6 State, social and enterprise managers",
-    "Party membership (base: non-party member)" =
-      "party_childParty member",
-    "Household income 20k~30k (base: <20k)" = "income_child2 20000-30000 Yuan",
-    "Household income 30k~50k (base: <20k)" = "income_child3 30000-50000 Yuan",
-    "Household income 50k~100k (base: <20k)" =
-      "income_child4 50000-100000 Yuan",
-    "Household income >100k (base: <20k)" = "income_child5 more than 100000 Yuan",
-    "Parental: logged net worth (mean=2.5, sd=1.3)" =
-      "log(net_worth_real + 0.1)",
-    "Gifted home upon marriage (base: no gifted home)" =
-      "marriagehome_childParent buy marriage home"
-  ),
-  legend.title = "Model",
-  model.names = c(
-    "1 (N=2325, pR2=0.26)",
-    "2 (N=1664, pR2=0.29)",
-    "3 (N=1664, pR2=0.31)"
-  ),
-  ci_level = 0.95,
-  colors = "Dark2",
-  point.shape = FALSE
-) +
-  ggtitle("Impact of parental wealth and gift on home ownership attainment",
-          subtitle = "Chinese urban residents age 25-50, 2015") +
-  xlab("Additive logit odds with 95% confidence level") +
-  ylab("") +
-  labs(caption = "Omitted several controls for child demographics and child/father's SES") +
-  theme_classic() +
-  theme(text = element_text(size = 20)) +
-  theme(legend.position = "bottom")
-```
-
----
-```{r,eval=FALSE}
-jtools::plot_summs(
-  rq_a,
-  rq_b,
-  rq_c,
-  rq_d,
-  coefs = c(
-    "Child: Male (base: female)" = "gender_childMale",
-    "Only child (base: multiple children family)" =
-      "onlychildonly child",
-    "Residence in main city (base: suburban)" =
-      "urban_child3 Main City Zone",
-    "Non-agricultural hukou (base: agricultural)" =
-      "hukou_child2 Non-Agricultural Hukou",
-    "Political/economic elite (base: peasants)" =
-      "jobcat_child6 State, social and enterprise managers",
-    "Party membership (base: non-party member)" =
-      "party_childParty member",
-    "Household income 20k~30k (base: <20k)" = "income_child2 20000-30000 Yuan",
-    "Household income 30k~50k (base: <20k)" = "income_child3 30000-50000 Yuan",
-    "Household income 50k~100k (base: <20k)" =
-      "income_child4 50000-100000 Yuan",
-    "Parental: logged net worth (mean=2.5, sd=1.3)" =
-      "log(net_worth_real + 0.1)",
-    "Gifted home upon marriage (base: no gifted home)" =
-      "marriagehome_childParent buy marriage home"
-  ),
-  legend.title = "Model",
-  model.names = c(
-    "1 (N=1116, R1=0.15)",
-    "2 (N=1034, R1=0.17)",
-    "3 (N=1034, R1=0.17)"
-  ),
-  ci_level = 0.95,
-  colors = "Dark2",
-  point.shape = FALSE
-) +
-  ggtitle("Impact of parental wealth and gift on housing wealth attainment",
-          subtitle = "Chinese urban homeowners age 25-50, 2015") +
-  xlab("Median regression estimate with 95% confidence level (10k)") +
-  ylab("") +
-  scale_x_continuous(breaks = seq(-5, 25, by = 5)) +
-  labs(caption = "Omitted several controls for child demographics and child/father's SES") +
-  theme_classic() +
-  theme(text = element_text(size = 20)) +
-  theme(legend.position = "bottom")
-```
-
----
-##Summary of findings
- - Higher stock of net worth from parents positively mediate educational attainment of offspring controling other cultural, occupational and institutional advantages
-
- - Some children, more likely male and only child, are gifted home by parents upon marriage, which significantly increases their chance to become homeowners
-
- - Higher net worth of parents is also associated with higher home value holdings among children, net of the functioning of children's achieved status and other parental resources
 
 ---
 ##Thoughts and forward
+ - Higher stock of net worth from parents positively mediate educational attainment of offspring controling other cultural, occupational and institutional advantages
+ 
  - Parental economic resources become more pronouncing, translating to indirect advantage of educational attainment for further building of better life chance and living standard, undermining education's role in facilitating equity and mobility
 
- - More directly, by gift upon marriage and other inter vivo transfers, parental wealth facilitate home/asset ownership, strengthening intergenerational contract, improving children's living standard potential, and passing on accumulated economic resources
- 
  - The impact might expand if the opportunity structure in Chinese society continue to increasingly rewards more for human capital and economic power (while less for political capital and institutional advantage)
  
  - Such transmission might constitute part of a chain from the political/institutional advantage at parental generation to the converted economic power, then to the persistence of it in the offpsring
- 
+
  - The mechanism is embedded in the process of China's macro-structural social transformation in the past decades, which would reveal how the priviledged manage to pass on their resources
 
 
