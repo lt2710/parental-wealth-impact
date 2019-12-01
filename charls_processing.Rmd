@@ -161,7 +161,7 @@ residence_2014 <-
 ```
 
 
-```{r, eval=FALSE}
+```{r}
 #generate hukou sequence
 hukou_2014 <- demographic_raw_2014 %>% select(
   id = ID,
@@ -171,8 +171,7 @@ hukou_2014 <- demographic_raw_2014 %>% select(
   hk002_1_1_:hk002_1_6_,
   #change year
   hk004_1_:hk004_6_#new type
-) %>% left_join(residence_2014, by = "id") %>%
-  filter(role == "1 Male")
+) %>% left_join(residence_2014, by = "id")
 hukou_2014 <- hukou_2014 %>% mutate(id = id %>% as.character())
 hukou_2014 <- hukou_2014 %>% filter(is.na(birthyear) == FALSE &
                                       is.na(hukoutype) == FALSE)
@@ -194,12 +193,11 @@ hukou_2014 <- hukou_2014 %>% select(
   hk002_1_6_,
   hk004_6_
 )
-hukou <- NULL
+hukou_raw <- NULL
 for (i in 1:nrow(hukou_2014)) {
-  adult_year <- hukou_2014$birthyear[i] + 18
   seq_raw <- cbind(
     c(
-      adult_year,
+      hukou_2014$birthyear[i],
       hukou_2014$hk002_1_1_[i],
       hukou_2014$hk002_1_2_[i],
       hukou_2014$hk002_1_3_[i],
@@ -219,118 +217,32 @@ for (i in 1:nrow(hukou_2014)) {
       "aha"
     )
   ) %>% as.data.frame() %>% na.omit()
-  seq_full <- NULL
-  seq_raw$num <- NA
-  for (j in 1:(nrow(seq_raw) - 1)) {
-    num <-
-      (
-        seq_raw$V1[j + 1] %>% as.character() %>% as.numeric() - seq_raw$V1[j] %>%
-          as.character() %>% as.numeric()
-      )
-    if (num < 0) {
-      num <- 10
+  a <- seq_raw %>% mutate(length = NA,
+                          V1 = V1 %>% as.character() %>% as.numeric())
+  for (j in 1:(nrow(a) - 1)) {
+    if (a$V1[j] < a$V1[j + 1]) {
+      a$length[j] <-
+        seq(a$V1[j], a$V1[j + 1], 1) %>% intersect(seq(1988, 1998, 1)) %>% length()
+    } else {
+      a$length[j] <- 0
     }
-    seq <- rep(seq_raw$V2[j], num)
-    seq_full <- c(seq_full, seq)
   }
-  seq_full <- c(hukou_2014$id[i] %>% as.character(),
-                hukou_2014$hhid[i] %>% as.character(),
-                seq_full)
-  length(seq_full) <- 80
-  hukou <- rbind(hukou, seq_full)
+  a <- a[-nrow(a),]
+  a <- a[order(a$length, decreasing = TRUE),]
+  record <- c(hukou_2014$id[i]%>% as.character(),
+              a$V2[1] %>% as.character())
+  hukou_raw <- rbind(hukou_raw, record)
 }
-hukou <- hukou %>% as.data.frame()
-hukou[hukou == 3] <- 2
-save(hukou, file = "output/hukou.RData")
+hukou_2014 <- hukou_raw %>% as.data.frame() %>% transmute(id = V1 %>% as.character(),
+                                                      hukou = V2 %>% as.character())
+hukou_2014$hukou[hukou_2014$hukou %in% c("2", "3", "4")] <-
+  "1 urban hukou"
+hukou_2014$hukou[hukou_2014$hukou == "1"] <- "0 rural hukou"
+save(hukou_2014, file = "output/hukou_2014.RData")
 ```
 
 ```{r}
-load("output/hukou.RData")
-hukou_small <- hukou[, 1:30]
-seq_hukou <- seqdef(hukou_small, 3:ncol(hukou_small))
-dist_hukou <- seqdist(seq_hukou,
-                      method = "OM",
-                      with.missing = TRUE,
-                      sm = "TRATE")
-```
-
-```{r, eval=FALSE}
-kmeans_hukou_3 <- kmeans(
-  dist_hukou,
-  centers = 3,
-  iter.max = 100,
-  nstart = 3,
-  algorithm = "Lloyd"
-)
-save(kmeans_hukou_3, file = "output/kmeans_hukou_3.RData")
-```
-
-```{r, eval=FALSE}
-kmeans_hukou_3 <- fpc::clusterboot(
-  dist_hukou,
-  B = 3,
-  bootmethod = "boot",
-  multipleboot = TRUE,
-  dissolution = 0.5,
-  recover = 0.7,
-  count = TRUE,
-  showplots = FALSE,
-  clustermethod = fpc::kmeansCBI,
-  iter.max = 100,
-  algorithm = "Lloyd",
-  krange = 3
-)
-save(kmeans_hukou_3, file = "output/kmeans_hukou_3.RData")
-```
-
-```{r}
-load("output/kmeans_hukou_3.RData")
-```
-
-```{r, eval=FALSE}
-#Compute optimal number of clusters of K-means
-bnclust_gap_plot1 <- factoextra::fviz_nbclust(
-  dist_hukou,
-  kmeans,
-  k.max = 5,
-  nboot = 10,
-  method = "wss"
-) +
-  ggtitle("Within Sum of Square by Three Measures") +
-  theme_classic()
-bnclust_gap_plot2 <- factoextra::fviz_nbclust(
-  dist_hukou,
-  kmeans,
-  k.max = 5,
-  nboot = 10,
-  method = "silhouette"
-) +
-  theme_classic()
-bnclust_gap_plot3 <- factoextra::fviz_nbclust(
-  dist_hukou,
-  kmeans,
-  k.max = 5,
-  nboot = 10,
-  method = "gap_stat"
-) +
-  labs(caption = "Source: MCA based on CFPS") +
-  theme_classic()
-gridExtra::grid.arrange(bnclust_gap_plot1,
-                        bnclust_gap_plot2,
-                        bnclust_gap_plot3,
-                        ncol = 1)
-```
-
-```{r}
-hukou_2014 <- cbind(id = hukou_small$V1 %>% as.character(),
-                    hukou = kmeans_hukou_3$cluster %>% as.character()) %>% as.data.frame()
-hukou_2014 <-
-  hukou_2014 %>% mutate(hukou = hukou %>% factor(
-    levels = c(2, 1, 3),
-    labels = c("Ag",
-               "Ag-NAg",
-               "NAg")
-  ))
+load("output/hukou_2014.RData")
 ```
 
 ```{r party}
@@ -443,8 +355,7 @@ education_2014 <- education_2014 %>% select(id,
 work_raw_2014 <- read.dta13("CHARLS2014/Work_History.dta")
 ```
 
-```{r, eval=FALSE}
-#generate work sequence
+```{r}
 work_2014 <- work_raw_2014 %>% select(
   id = ID,
   hhid = householdID,
@@ -456,7 +367,14 @@ work_2014 <- work_raw_2014 %>% select(
   #Job category
   f104_0_:f104_18_,
   #Job category detailed
-  f105_0_:f105_14_#detail firm
+  f105_0_:f105_14_,
+  #detail firm
+  f110_0_:f110_15_,
+  #rank at start
+  f110_a_1_:f110_a_8_,
+  #rank at middle
+  f124_0_:f124_15_
+  #rank at end
 ) %>% left_join(demographic_raw_2014 %>% select(id =
                                                   ID,
                                                 role =
@@ -473,16 +391,25 @@ for (i in 1:nrow(work_2014)) {
     cat1 <- paste("f_3_", j, "_", sep = "")
     cat2 <- paste("f104_", j, "_", sep = "")
     cat3 <- paste("f105_", j, "_", sep = "")
-    if (is.na(work_2014[[start]][i]) == FALSE &
+    cat4 <- paste("f110_", j, "_", sep = "")
+    cat5 <- paste("f110_a_", j, "_", sep = "")
+    cat6 <- paste("f124_", j, "_", sep = "")
+    job <- NA
+    role <- NA
+    start_year <- work_2014[[start]][i]
+    if (is.na(start_year) == FALSE &
         is.na(work_2014[[cat1]][i]) == FALSE) {
       if (is.na(work_2014[[end]][i]) == FALSE) {
         end_year <- work_2014[[end]][i]
       } else{
         end_year <- 2014
       }
-      duration <- end_year - work_2014[[start]][i]
-      if (duration < 0) {
-        duration <- duration * -1
+      duration <- end_year - start_year
+      if (is.na(duration) == FALSE & duration < 0) {
+        b<-end_year
+        a<-start_year
+        start_year<-b
+        end_year<-a
         print(c(
           work_2014$id[i],
           "switch start/end year due to data mistake"
@@ -491,22 +418,100 @@ for (i in 1:nrow(work_2014)) {
       job <- work_2014[[cat1]][i] %>% as.character()
       if (job %in% c("2 Agricultural Employment",
                      "3 Non-agricultural Employment")) {
-        job <- work_2014[[cat2]][i] %>% as.character()
-        if (job %in% c("4 Firm")) {
-          job <- work_2014[[cat3]][i] %>% as.character()
+        if (is.null(work_2014[[cat2]][i]) == FALSE) {
+          if (is.na(work_2014[[cat2]][i]) == FALSE) {
+            job <- work_2014[[cat2]][i] %>% as.character()
+          }
+        }
+        if (is.null(work_2014[[cat4]][i]) == FALSE) {
+          if (is.na(work_2014[[cat4]][i]) == FALSE) {
+            role <- work_2014[[cat4]][i] %>% as.character()
+          }
+        }
+        if (is.null(work_2014[[cat5]][i]) == FALSE) {
+          if (is.na(work_2014[[cat5]][i]) == FALSE) {
+            role <- work_2014[[cat5]][i] %>% as.character()
+          }
+        }
+        if (is.null(work_2014[[cat6]][i]) == FALSE) {
+          if (is.na(work_2014[[cat6]][i]) == FALSE) {
+            role <- work_2014[[cat6]][i] %>% as.character()
+          }
         }
       }
-      job[job %in% c(
-        "1 Own Agricultural Production and Business",
-        "6 Farmer",
-        "8 Rural Collective Economic Organization"
-      )] <- "AG"
-      job[job %in% c("6 Army",
-                     "1 Government",
-                     "2 Public Institution",
-                     "1 State Controlled Firm")] <- "nAGin"
-      job[job %in% c(
-        "4 Non-agricultural self-employment",
+      #role<- work_2014[[cat4]][i] %>% as.character()
+      if (job %in% c("4 Firm")) {
+        job <- work_2014[[cat3]][i] %>% as.character()
+      }
+      if (is_empty(start_year) == TRUE) {
+        start_year <- "yo"
+      }
+      if (is_empty(end_year) == TRUE) {
+        end_year <- "yo"
+      }
+      if (is_empty(job) == TRUE) {
+        job <- "yo"
+      }
+      if (is_empty(role) == TRUE) {
+        role <- "yo"
+      }
+      overlap<-seq(start_year,end_year,1)%>%intersect(seq(1988,1998,1))%>%length()
+      record <- c(work_2014$id[i],
+                  work_2014$hhid[i],
+                  job,
+                  role,
+                  start_year,
+                  end_year,
+                  overlap)
+      seq_full <- rbind(seq_full,
+                        record)
+    }
+  }
+  work <- rbind(work, seq_full)
+}
+work <- work %>% as.data.frame()
+names(work)<-c("id",
+               "hhid",
+               "job",
+               "role",
+               "start_year",
+               "end_year",
+               "overlap")
+```
+
+```{r}
+work_new <- NULL
+for (i in work$id %>% unique()) {
+  dta <- work %>% filter(id == i)
+  record <- dta[order(dta$overlap, decreasing = TRUE), ]
+  if (record$overlap[1] == 0) {
+    record <-
+      dta[order((1988 - dta$end_year %>% as.character() %>% as.numeric()),
+                decreasing = TRUE), ]
+  }
+  record <- record[1, ]
+  work_new <- rbind(work_new, record)
+}
+
+work_new<-work_new%>%mutate(job=job%>%as.character(),
+                            role=role%>%as.character())
+
+work_new$job[work_new$job %in% c(
+  "1 Government"
+)] <- "5 Government"
+
+work_new$job[work_new$job %in% c(
+  "2 Public Institution",
+  "6 Army"
+)] <- "4 Public institution"
+
+work_new$job[work_new$job %in% c(
+  "1 State Controlled Firm"
+)] <- "3 State Controlled Firm"
+
+work_new$job[work_new$job %in% c(
+  "4 Non-agricultural self-employment",
+  "3 Non-agricultural Employment",
         "5 Unpaid Household Business Help",
         "3 NGO",
         "5 Individual Firm",
@@ -517,149 +522,37 @@ for (i in 1:nrow(work_2014)) {
         "5 Foreign Controlled Firm",
         "2 Collective Controlled Firm",
         "6 Other"
-      )] <- "nAGout"
-      seq <- rep(job, duration)
-      seq_full <- c(seq_full, seq)
-    }
-  }
-  seq_full <- c(work_2014$id[i] %>% as.character(),
-                work_2014$hhid[i] %>% as.character(),
-                seq_full)
-  length(seq_full) <- 82
-  work <- rbind(work, seq_full)
-}
-work <- work %>% as.data.frame()
-save(work, file = "output/work.RData")
-```
+)] <- "2 Private"
 
-```{r, message=FALSE}
-load("output/work.RData")
-work_small <- work[, 1:33]
-seq_work <- seqdef(work_small, 3:ncol(work_small))
-dist_work <- seqdist(seq_work,
-                     method = "OM",
-                     with.missing = TRUE,
-                     sm = "TRATE")
-```
+work_new$job[work_new$job %in% c(
+  "1 Own Agricultural Production and Business",
+  "2 Agricultural Employment",
+  "6 Farmer",
+  "8 Rural Collective Economic Organization"
+)] <- "1 Agricultural"
 
-```{r, eval=FALSE}
-kmeans_work_4 <- kmeans(
-  dist_work,
-  centers = 4,
-  iter.max = 100,
-  nstart = 4,
-  algorithm = "Lloyd"
-)
-save(kmeans_work_4, file = "output/kmeans_work_4.RData")
-```
+work_new$role[work_new$role %in% c("1 Worker")] <- "1 Worker"
 
-```{r, eval=FALSE}
-kmeans_work_4 <- fpc::clusterboot(
-  dist_work,
-  B = 1,
-  bootmethod = "boot",
-  multipleboot = TRUE,
-  dissolution = 0.5,
-  recover = 0.7,
-  count = TRUE,
-  showplots = FALSE,
-  clustermethod = fpc::kmeansCBI,
-  iter.max = 100,
-  algorithm = "Lloyd",
-  krange = 4
-)
-save(kmeans_work_4, file = "output/kmeans_work_4.RData")
+work_new$role[work_new$role %in% c("2 Team Leader",
+                                   "3 Section Chief",
+                                   "6 Village Leader",
+                                   "7 Township Leader",
+                                   "8 Division Manager")] <- "2 low rank cadre"
+
+work_new$role[work_new$role %in% c("4 Director of Division",
+                                   "5 Director-general of a bureau or Above",
+                                   "9 General Manager")] <- "3 high rank cadre"
+
+work_new$role[work_new$role %in% c("10 Other")] <- "missing"
+
+work_new$role[is.na(work_new$role) == TRUE] <- "missing"
+
+work_2014<-work_new%>%select(id,job,rank=role)
+save(work_2014, file = "output/work_2014.RData")
 ```
 
 ```{r}
-load("output/kmeans_work_4.RData")
-```
-
-```{r, eval=FALSE}
-#Compute optimal number of clusters of K-means
-bnclust_gap_plot1 <- factoextra::fviz_nbclust(
-  dist_hukou,
-  kmeans,
-  k.max = 5,
-  nboot = 10,
-  method = "wss"
-) +
-  ggtitle("Within Sum of Square by Three Measures") +
-  theme_classic()
-bnclust_gap_plot2 <- factoextra::fviz_nbclust(
-  dist_hukou,
-  kmeans,
-  k.max = 5,
-  nboot = 10,
-  method = "silhouette"
-) +
-  theme_classic()
-bnclust_gap_plot3 <- factoextra::fviz_nbclust(
-  dist_hukou,
-  kmeans,
-  k.max = 5,
-  nboot = 10,
-  method = "gap_stat"
-) +
-  labs(caption = "Source: MCA based on CFPS") +
-  theme_classic()
-gridExtra::grid.arrange(bnclust_gap_plot1,
-                        bnclust_gap_plot2,
-                        bnclust_gap_plot3,
-                        ncol = 1)
-```
-
-```{r}
-work_2014 <- cbind(id = work_small$V1 %>% as.character(),
-                   jobcat = kmeans_work_4$cluster %>% as.character()) %>% as.data.frame()
-work_2014 <-
-  work_2014 %>% mutate(jobcat = jobcat %>% factor(
-    levels = c(1, 4, 3, 2),
-    labels = c("AG",
-               "mixed",
-               "nAGout",
-               "nAGin")
-  ))
-```
-
-```{r, eval=FALSE}
-#Transform variables
-start_years <- names(work_2014 %>% select(f_2_1_0_:f_2_1_18_))
-end_years <- names(work_2014 %>% select(f_2_5_0_:f_2_5_18_))
-job_cat <- names(work_2014 %>% select(f_3_0_:f_3_18_))
-for (i in c(start_years,
-            end_years)) {
-  work_2014[[i]] <- work_2014[[i]] %>% as.numeric()
-  work_2014[[i]][is.na(work_2014[[i]]) == TRUE] <- 0
-}
-for (i in job_cat) {
-  work_2014[[i]] <- work_2014[[i]] %>% as.character()
-}
-#Choose the job with longest tenure
-work_2014$num <- NA
-for (i in 1:nrow(work_2014)) {
-  work_2014$num[i] <- 1
-  duration <- 0
-  duration_top <-
-    work_2014[[end_years[2]]][i] - work_2014[[start_years[2]]][i]
-  for (j in 3:(length(start_years))) {
-    if (work_2014[[end_years[j]]][i] != 0) {
-      duration <-
-        work_2014[[end_years[j]]][i] - work_2014[[start_years[j]]][i]
-      if (duration > duration_top) {
-        work_2014$num[i] <- (j - 1)
-        duration_top <- duration
-      }
-    }
-  }
-}
-#Return job category
-for (i in 1:nrow(work_2014)) {
-  work_2014$jobcat[i] <-
-    work_2014[[paste("f_3_", work_2014$num[i], "_", sep = "")]][i]
-}
-work_2014 <- work_2014 %>% select(id,
-                                  jobcat)
+load( "output/work_2014.RData")
 ```
 
 ```{r ind income}
@@ -1425,9 +1318,8 @@ names(child)[!names(child) %in% c("childid",
 ```
 
 ```{r Only keep householder in parent family}
-unique_hhids <- dta_hh$hhid %>% unique()
 householder <- NULL
-for (i in unique_hhids) {
+for (i in dta_hh$hhid %>%as.character()%>% unique()) {
   dta <- dta_hh %>% filter(hhid == i)
   dta <- dta[order(dta$role, decreasing = FALSE), ]
   record <- dta[1, ]
@@ -1456,6 +1348,4 @@ for (i in 1:nrow(merged_charls)) {
   }
 }
 save(merged_charls, file = "output/merged_charls.RData")
-save(seq_hukou, file = "output/seq_hukou.RData")
-save(seq_work, file = "output/seq_work.RData")
 ```
