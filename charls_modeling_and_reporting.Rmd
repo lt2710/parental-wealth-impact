@@ -153,31 +153,6 @@ dta_lm_child$mgt[is.na(dta_lm_child$mgt) == TRUE] <- 0
 dta_lm_child$mgt<-dta_lm_child$mgt%>%factor(levels = c(0,1),
                                             labels = c("Non-manager",
                                                        "Managerial elites"))
-#2 generation party
-dta_lm_child$party_2gen <- NA
-dta_lm_child$party_2gen[dta_lm_child$party == "Party member" &
-                          dta_lm_child$party_child == "Party member"] <- "2 both CCP"
-dta_lm_child$party_2gen[dta_lm_child$party == "Not party member" &
-                          dta_lm_child$party_child == "Party member"] <- "1 one CCP"
-dta_lm_child$party_2gen[dta_lm_child$party == "Party member" &
-                          dta_lm_child$party_child == "Not Party member"] <- "1 one CCP"
-dta_lm_child$party_2gen[dta_lm_child$party == "Not party member" &
-                          dta_lm_child$party_child == "Not Party member"] <- "0 no CCP"
-#2 generation hukou
-dta_lm_child$hukou_2gen <- NA
-dta_lm_child$hukou_2gen[dta_lm_child$hukou == "Ag" &
-                          dta_lm_child$hukou_child == "1 Agricultural Hukou"] <- "0 both rural"
-dta_lm_child$hukou_2gen[dta_lm_child$hukou == "Ag" &
-                          dta_lm_child$hukou_child == "2 Non-Agricultural Hukou"] <- "1 one urban"
-dta_lm_child$hukou_2gen[dta_lm_child$hukou == "Ag-NAg" &
-                          dta_lm_child$hukou_child == "1 Agricultural Hukou"] <- "1 one urban"
-dta_lm_child$hukou_2gen[dta_lm_child$hukou == "Ag-NAg" &
-                          dta_lm_child$hukou_child == "2 Non-Agricultural Hukou"] <-
-  "2 both urban"
-dta_lm_child$hukou_2gen[dta_lm_child$hukou == "NAg" &
-                          dta_lm_child$hukou_child == "1 Agricultural Hukou"] <- "1 one urban"
-dta_lm_child$hukou_2gen[dta_lm_child$hukou == "NAg" &
-                          dta_lm_child$hukou_child == "2 Non-Agricultural Hukou"] <- "2 both urban"
 ```
 
 ##Child education
