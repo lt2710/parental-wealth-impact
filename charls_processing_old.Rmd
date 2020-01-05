@@ -99,7 +99,6 @@ residence_2014 <-
 
 
 ```{r}
-load("output/retire_year.RData")
 #generate hukou sequence
 hukou_2014 <- demographic_raw_2014 %>% select(
   id = ID,
@@ -111,8 +110,7 @@ hukou_2014 <- demographic_raw_2014 %>% select(
   hk002_1_1_:hk002_1_6_,
   #new type
   hk004_1_:hk004_6_
-) %>% left_join(residence_2014, by = "id") 
-hukou_2014 <- hukou_2014%>% left_join(retire_year, by="id")
+) %>% left_join(residence_2014, by = "id")
 hukou_2014 <- hukou_2014 %>% mutate(id = id %>% as.character(),
                                     hukoutype = hukoutype %>% as.character(),
                                     hk004_1_ = hk004_1_ %>%as.character(),
@@ -123,8 +121,6 @@ hukou_2014 <- hukou_2014 %>% mutate(id = id %>% as.character(),
                                     hk004_6_ = hk004_6_ %>%as.character())
 hukou_2014$birthyear[is.na(hukou_2014$birthyear) == TRUE]<-1960
 hukou_2014$hukoutype[is.na(hukou_2014$hukoutype) == TRUE]<-"1 Agricultural Hukou"
-hukou_2014$start_year[is.na(hukou_2014$start_year) == TRUE]<-2006
-hukou_2014$end_year[is.na(hukou_2014$end_year) == TRUE]<-2014
 hukou_2014 <- hukou_2014 %>% select(
   id,
   hhid,
@@ -141,9 +137,7 @@ hukou_2014 <- hukou_2014 %>% select(
   hk002_1_5_,
   hk004_5_,
   hk002_1_6_,
-  hk004_6_,
-  start_year,
-  end_year
+  hk004_6_
 )
 hukou_raw <- NULL
 for (i in 1:nrow(hukou_2014)) {
@@ -174,8 +168,7 @@ for (i in 1:nrow(hukou_2014)) {
   for (j in 1:(nrow(a) - 1)) {
     if (a$V1[j] < a$V1[j + 1]) {
       a$length[j] <-
-        seq(a$V1[j], a$V1[j + 1], 1) %>% intersect(seq(hukou_2014$start_year[i]%>%as.character()%>%as.numeric(), 
-                                                       hukou_2014$end_year[i]%>%as.character()%>%as.numeric(), 1)) %>% length()
+        seq(a$V1[j], a$V1[j + 1], 1) %>% intersect(seq(1988, 1998, 1)) %>% length()
     } else {
       a$length[j] <- 0
     }
@@ -188,9 +181,9 @@ for (i in 1:nrow(hukou_2014)) {
 }
 hukou_2014 <- hukou_raw %>% as.data.frame() %>% transmute(id = V1 %>% as.character(),
                                                       hukou = V2 %>% as.character())
-hukou_2014$hukou[hukou_2014$hukou %in% c("2 Non-agricultural Hukou")] <-
+hukou_2014$hukou[hukou_2014$hukou %in% c("2 Non-agricultural Hukou", "3 Unified Residence Hukou", "4 None")] <-
   "1 urban hukou"
-hukou_2014$hukou[hukou_2014$hukou  %in% c( "1 Agricultural Hukou","3 Unified Residence Hukou", "4 None")] <- "0 rural hukou"
+hukou_2014$hukou[hukou_2014$hukou == "1 Agricultural Hukou"] <- "0 rural hukou"
 save(hukou_2014, file = "output/hukou_2014.RData")
 ```
 
@@ -391,7 +384,12 @@ work_2014 <- work_raw_2014 %>% select(
   #rank at middle
   f124_0_:f124_15_
   #rank at end
-) 
+) %>% left_join(demographic_raw_2014 %>% select(id =
+                                                  ID,
+                                                role =
+                                                  rgender),
+                by = "id") %>% filter(role ==
+                                        "1 Male")
 work_2014 <- work_2014 %>% mutate(id = id %>% as.character())
 work <- NULL
 for (i in 1:nrow(work_2014)) {
@@ -494,16 +492,8 @@ names(work)<-c("id",
 work_new <- NULL
 for (i in work$id %>% unique()) {
   dta <- work %>% filter(id == i)
-  retire_year<- dta$end_year%>%sort(decreasing = TRUE)
-  retire_year<-retire_year[1]%>%as.character()%>%as.numeric()
-  dta$overlap_retire<-NA
-  for (i in 1:nrow(dta)){
-    dta$overlap_retire[i]<-(seq(dta$start_year[i]%>%as.character()%>%as.numeric(),
-                               dta$end_year[i]%>%as.character()%>%as.numeric(),
-                               1)%>%intersect(seq(retire_year-10,retire_year,1)))%>%length()
-  }
-  record <- dta[order(dta$overlap_retire, decreasing = TRUE), ]
-  if (record$overlap_retire[1] == 0) {
+  record <- dta[order(dta$overlap, decreasing = TRUE), ]
+  if (record$overlap[1] == 0) {
     record <-
       dta[order((1988 - dta$end_year %>% as.character() %>% as.numeric()),
                 decreasing = TRUE), ]
@@ -574,8 +564,6 @@ work_2014<-work_new%>%select(id,
                              rank=role,
                              rank_detail=role_detail)
 save(work_2014, file = "output/work_2014.RData")
-retire_year<-work_new%>%select(id,start_year,end_year)
-save(retire_year, file = "output/retire_year.RData")
 ```
 
 ```{r}
@@ -1056,16 +1044,16 @@ child_2015 <- child_raw_2015 %>% select(
   independence = cb053,
   distance = cb053_2,
   education = cb052_w3,
+  urban = cb054,
   hukou = cb055,
-  hukou_prior= cb055_w2_1,
   hukou_place = cb057,
+  hukou_prior= cb055_w2_1,
   marriage = cb063,
   party = cb063_w3_2,
   numchildren = cb065,
   income = cb069,
   home = cb071_w3,
-  homevalue = cb072_w3,
-  urban = cb054
+  homevalue = cb072_w3
 ) %>% left_join(psu, by = "cid")
 ```
 
@@ -1076,7 +1064,7 @@ child_2015$gender <-
                                                            "Male"))
 ```
 
-```{r Marriage status}
+```{r Marriage status, echo=TRUE, warning=FALSE}
 child_2015$marriage <- child_2015$marriage %>% as.character()
 child_2015$marriage[child_2015$marriage == "1 Married With Spouse At Present" |
                       child_2015$marriage == "2 Married But Not Living With Spouse Temporarily" |
@@ -1241,63 +1229,9 @@ child_2015$income <-
   )%>%as.character()%>%as.numeric()
 ```
 
-```{r}
-child_2014_raw <- demographic_raw_2014 %>% select(hhid = householdID,
-                                                  c036_1_:c036_18_,
-                                                  c037a1_1_:c037a1_18_)
-child_2014<-NULL
-for (i in 1:nrow(demographic_raw_2014)){
-  for (j in 1:18){
-    if (is.na(child_2014_raw[[paste("c036_",j,"_",sep = "")]][i])==FALSE){
-    householdid<-child_2014_raw$hhid[i]
-    record<-c(child_2014_raw$hhid[i]%>%as.character(),
-              j,
-              child_2014_raw[[paste("c036_",j,"_",sep = "")]][i]%>%as.numeric(),
-              child_2014_raw[[paste("c037a1_",j,"_",sep = "")]][i]%>%as.character()
-              )
-    child_2014<-rbind(child_2014,record)
-    }
-  }
-} 
-child_2014<-child_2014%>%as.data.frame()
-child_2014$education_years_spouse <- NA
-child_2014$education_years_spouse[child_2014$V3 %in%c(1)] <- 0
-child_2014$education_years_spouse[child_2014$V3 %in%c(2,3)] <-
-  3
-child_2014$education_years_spouse[child_2014$V3 %in%c(4)] <-
-  6
-child_2014$education_years_spouse[child_2014$V3 %in%c(5)] <-
-  9
-child_2014$education_years_spouse[child_2014$V3 %in%c(6)] <-
-  12
-child_2014$education_years_spouse[child_2014$V3 %in%c(7)] <-
-  11
-child_2014$education_years_spouse[child_2014$V3 %in%c(8)] <-
-  14
-child_2014$education_years_spouse[child_2014$V3 %in%c(9)] <-
-  16
-child_2014$education_years_spouse[child_2014$V3 %in%c(10)] <-
-  19
-child_2014$education_years_spouse[child_2014$V3 %in%c(11)] <-
-  22
-
-child_2014$V4[child_2014$V4=="3 Unified Residence Hukou"]<-"1 Agricultural Hukou"
-child_2014$V1<-child_2014$V1%>%as.character()
-child_2014$V2<-child_2014$V2%>%as.character()%>%as.integer()
-child_2014$V4<-child_2014$V4%>%as.character()
-
-child_2014<-child_2014%>%as.data.frame()%>%select(hhid=V1,
-                                                  childid=V2,
-                                                  education_years_spouse,
-                                                  hukou_spouse=V4)
-child_2015 <- right_join(child_2014,
-                         child_2015,
-                         by = c("hhid", "childid"))
-```
-
 ```{r Occupation}
 child_raw_2013 <- read.dta13("CHARLS2013/Child.dta")
-child_2013 <- child_raw_2013 %>% select(hhid = householdID,
+child_2013 <- child_raw_2013 %>% select(id = ID,
                                         childid = childID,
                                         jobcat = cb071)
 child_2013$jobcat <- child_2013$jobcat %>% as.character()
@@ -1322,10 +1256,9 @@ child_2013$jobcat <- child_2013$jobcat %>% factor(
     "6 State, social and enterprise managers"
   )
 )
-child_2013$childid <- child_2013$childid %>% as.integer()
 child_2015 <- right_join(child_2013,
                          child_2015,
-                         by = c("hhid", "childid"))
+                         by = c("id", "childid"))
 ```
 
 ```{r}
