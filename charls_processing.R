@@ -1,29 +1,12 @@
----
-title: "CHARLS Data processing"
-author: "Langyi Tian"
-output: html_document
----      
-###Setup
-```{r setup}
-rm(list = ls())#clear environment
-wd <- "C:/Users/Administrator/Documents/GitHub/parental-wealth-impact"#set working directory
-#Set up default knitr chunk options
-library("knitr")
-knitr::opts_chunk$set(
-  echo = TRUE,
-  eval = TRUE,
-  message = FALSE,
-  warning = FALSE,
-  cache = TRUE,
-  cache.lazy = FALSE
-)
-options(htmltools.dir.version = FALSE)
+## ----setup-------------------------------------------------------------------------------------------------------------------------
+path_to_code<-rstudioapi::getActiveDocumentContext()$path
+main_directory<-strsplit(path_to_code,"/[a-zA-Z0-9_-]*.R$")[[1]]
+setwd(main_directory)
 #Set time variables to debug date transformation
 Sys.setlocale("LC_TIME", "C")
 Sys.setenv(TZ="Europe/Berlin")
-```  
 
-```{r packages, message = FALSE}
+## ----packages, message = FALSE-----------------------------------------------------------------------------------------------------
 # Load packages.
 packages <- c(
   "readstata13",
@@ -41,19 +24,21 @@ packages <- lapply(
   }
 )
 select <- dplyr::select
-```
 
-###Parental ind level data
-```{r import 2015 demographics}
+
+## ----import 2015 demographics------------------------------------------------------------------------------------------------------
 #read in data
 demographic_raw_2015 <-
   read.dta13(
     "CHARLS2015/Demographic_Background.dta",
     convert.factors = TRUE,
     generate.factors = TRUE
-  )
-#select necessary variables
-demographic_2015 <- demographic_raw_2015 %>%
+  ) 
+
+## ----------------------------------------------------------------------------------------------------------------------------------
+demographic_2015 <-
+  demographic_raw_2015 %>%
+  #select necessary variables
   select(
     id = ID,
     hhid = householdID,
@@ -63,17 +48,11 @@ demographic_2015 <- demographic_raw_2015 %>%
     last_urban = bb000_w3_2,
     urban_change = bb001_w3,
     new_urban = bb001_w3_2
-  )
-```
-
-```{r}
-#generate age at 2015
-demographic_2015 <-
-  demographic_2015 %>%
+  ) %>%
+  #generate age at 2015
   mutate(age = 2015 - birthyear) %>%
-  select(-birthyear)
-#generate accurate address
-demographic_2015 <- demographic_2015 %>%
+  select(-birthyear) %>%
+  #generate accurate address
   mutate(
     urban = ifelse(
       urban_change == "1 ZLocation",
@@ -85,12 +64,14 @@ demographic_2015 <- demographic_2015 %>%
       )
     ) %>% as.factor()
   ) %>%
-  select(-last_urban, -urban_change, -new_urban)
+  select(-last_urban, 
+         -urban_change, 
+         -new_urban)
 
 demographic_2015 %>% head()
-```
- 
-```{r import 2014 demographics}
+
+
+## ----import 2014 demographics------------------------------------------------------------------------------------------------------
 #read in data
 demographic_raw_2014 <-
   read.dta13(
@@ -107,10 +88,9 @@ residence_2014 <-
   ) %>%
   select(id = ID,
          birthyear = rbirthyear)
-```
 
 
-```{r}
+## ----------------------------------------------------------------------------------------------------------------------------------
 #read hukou data
 hukou_2014 <- demographic_raw_2014 %>% select(
   id = ID,
@@ -120,9 +100,9 @@ hukou_2014 <- demographic_raw_2014 %>% select(
   hk004_1_:hk004_6_#new type
 ) %>%
   left_join(residence_2014, by = "id")
-```
 
-```{r}
+
+## ----------------------------------------------------------------------------------------------------------------------------------
 #set ideal year to be when the respondent is 40yrs old
 career_age <- 40
 #calculate the gap between years of change and ideal year
@@ -147,9 +127,9 @@ hukou_var <- hukou_long %>%
   arrange(id)
 #display
 hukou_var %>% head()
-```
 
-```{r}
+
+## ----------------------------------------------------------------------------------------------------------------------------------
 #join var into hukou
 hukou_2014 <- full_join(hukou_2014,
                         hukou_var,
@@ -169,10 +149,9 @@ hukou_2014 <- hukou_2014 %>%
                       `1 Agricultural Hukou`="3 Unified Residence Hukou"))
 
 hukou_2014 %>% head()
-```
- 
 
-```{r}
+
+## ----------------------------------------------------------------------------------------------------------------------------------
 #restrucutre party column
 party_2014 <- demographic_raw_2014 %>%
   select(id = ID,
@@ -185,9 +164,9 @@ party_2014 <- demographic_raw_2014 %>%
              labels = c("0 non party member", "1 party member")
            ))
 party_2014 %>% head()
-```
 
-```{r import education}
+
+## ----import education--------------------------------------------------------------------------------------------------------------
 #education 2015
 education_raw_2015 <-
   read.dta13(
@@ -211,9 +190,9 @@ education_2013 <- education_raw_2013 %>%
   select(id = ID,
          education11 = zbd001,
          education13 = bd001)
-```
 
-```{r}
+
+## ----------------------------------------------------------------------------------------------------------------------------------
 #merge all data and replace in order
 education_merged <-
   education_2015 %>%
@@ -235,9 +214,9 @@ education_merged  <-
     education_years = recode(education, 0, 3, 4, 6, 9, 12, 12, 15, 16, 18, 21)
   )
 education_merged %>% head()
-```
 
-```{r occupation}
+
+## ----occupation--------------------------------------------------------------------------------------------------------------------
 #import data
 work_raw_2014 <-
   read.dta13(
@@ -245,9 +224,9 @@ work_raw_2014 <-
     convert.factors = TRUE,
     generate.factors = TRUE
   )
-```
 
-```{r}
+
+## ----------------------------------------------------------------------------------------------------------------------------------
 #subset variables
 work_2014 <- work_raw_2014 %>%
   select(
@@ -297,9 +276,9 @@ work_var <- work_long %>%
   arrange(id)
 #display
 work_var %>% head()
-```
 
-```{r}
+
+## ----------------------------------------------------------------------------------------------------------------------------------
 #join var into hukou
 work_merged <- full_join(work_2014,
                   work_var,
@@ -352,142 +331,142 @@ work_merged <- work_merged %>%
       as.factor()
   )
 work_merged %>% head()
-```
 
-```{r}
+
+## ----------------------------------------------------------------------------------------------------------------------------------
 psu <- read.dta13("CHARLS2013/PSU.dta",
                   fromEncoding = "GB2312",
                   convert.factors = FALSE)
 #city name missalinius
-psu$city[psu$city == "åŒ—äº¬"] <- "åŒ—äº¬å¸‚"
-psu$city[psu$city == "å“ˆå°”æ»¨"] <- "å“ˆå°”æ»¨å¸‚"
-psu$city[psu$city == "å¤©æ´¥"] <- "å¤©æ´¥å¸‚"
+psu$city[psu$city == "±±¾©"] <- "±±¾©ÊÐ"
+psu$city[psu$city == "¹þ¶û±õ"] <- "¹þ¶û±õÊÐ"
+psu$city[psu$city == "Ìì½ò"] <- "Ìì½òÊÐ"
 #a new tier variable
 psu$tier <- NA
 psu$tier[psu$city %in% c(
-  "ä¸Šæµ·å¸‚",
-  "åŒ—äº¬å¸‚",
-  "å¹¿å·žå¸‚",
-  "æ·±åœ³å¸‚",
-  "é‡åº†å¸‚",
-  "å¤©æ´¥å¸‚",
-  "è‹å·žå¸‚",
-  "æˆéƒ½å¸‚",
-  "æ­¦æ±‰å¸‚",
-  "æ­å·žå¸‚",
-  "å—äº¬å¸‚",
-  "è¥¿å®‰å¸‚",
-  "é•¿æ²™å¸‚",
-  "æ²ˆé˜³å¸‚",
-  "é’å²›å¸‚",
-  "éƒ‘å·žå¸‚",
-  "å¤§è¿žå¸‚",
-  "ä¸œèŽžå¸‚",
-  "å®æ³¢å¸‚"
+  "ÉÏº£ÊÐ",
+  "±±¾©ÊÐ",
+  "¹ãÖÝÊÐ",
+  "ÉîÛÚÊÐ",
+  "ÖØÇìÊÐ",
+  "Ìì½òÊÐ",
+  "ËÕÖÝÊÐ",
+  "³É¶¼ÊÐ",
+  "ÎäººÊÐ",
+  "º¼ÖÝÊÐ",
+  "ÄÏ¾©ÊÐ",
+  "Î÷°²ÊÐ",
+  "³¤É³ÊÐ",
+  "ÉòÑôÊÐ",
+  "ÇàµºÊÐ",
+  "Ö£ÖÝÊÐ",
+  "´óÁ¬ÊÐ",
+  "¶«Ý¸ÊÐ",
+  "Äþ²¨ÊÐ"
 )] <- "1st tier"
 psu$tier[psu$city %in% c(
-  "åŽ¦é—¨å¸‚",
-  "ç¦å·žå¸‚",
-  "æ— é”¡å¸‚",
-  "åˆè‚¥å¸‚",
-  "æ˜†æ˜Žå¸‚",
-  "å“ˆå°”æ»¨å¸‚",
-  "æµŽå—å¸‚",
-  "ä½›å±±å¸‚",
-  "é•¿æ˜¥å¸‚",
-  "æ¸©å·žå¸‚",
-  "çŸ³å®¶åº„å¸‚",
-  "å—å®å¸‚",
-  "å¸¸å·žå¸‚",
-  "æ³‰å·žå¸‚",
-  "å—æ˜Œå¸‚",
-  "è´µé˜³å¸‚",
-  "å¤ªåŽŸå¸‚",
-  "çƒŸå°å¸‚",
-  "å˜‰å…´å¸‚",
-  "å—é€šå¸‚",
-  "é‡‘åŽå¸‚",
-  "ç æµ·å¸‚",
-  "æƒ å·žå¸‚",
-  "å¾å·žå¸‚",
-  "æµ·å£å¸‚",
-  "ä¹Œé²æœ¨é½å¸‚",
-  "ç»å…´å¸‚",
-  "ä¸­å±±å¸‚",
-  "å°å·žå¸‚",
-  "å…°å·žå¸‚"
+  "ÏÃÃÅÊÐ",
+  "¸£ÖÝÊÐ",
+  "ÎÞÎýÊÐ",
+  "ºÏ·ÊÊÐ",
+  "À¥Ã÷ÊÐ",
+  "¹þ¶û±õÊÐ",
+  "¼ÃÄÏÊÐ",
+  "·ðÉ½ÊÐ",
+  "³¤´ºÊÐ",
+  "ÎÂÖÝÊÐ",
+  "Ê¯¼Ò×¯ÊÐ",
+  "ÄÏÄþÊÐ",
+  "³£ÖÝÊÐ",
+  "ÈªÖÝÊÐ",
+  "ÄÏ²ýÊÐ",
+  "¹óÑôÊÐ",
+  "Ì«Ô­ÊÐ",
+  "ÑÌÌ¨ÊÐ",
+  "¼ÎÐËÊÐ",
+  "ÄÏÍ¨ÊÐ",
+  "½ð»ªÊÐ",
+  "Öéº£ÊÐ",
+  "»ÝÖÝÊÐ",
+  "ÐìÖÝÊÐ",
+  "º£¿ÚÊÐ",
+  "ÎÚÂ³Ä¾ÆëÊÐ",
+  "ÉÜÐËÊÐ",
+  "ÖÐÉ½ÊÐ",
+  "Ì¨ÖÝÊÐ",
+  "À¼ÖÝÊÐ"
 )] <- "2nd tier"
 psu$tier[psu$city %in% c(
-  "æ½åŠå¸‚",
-  "ä¿å®šå¸‚",
-  "é•‡æ±Ÿå¸‚",
-  "æ‰¬å·žå¸‚",
-  "æ¡‚æž—å¸‚",
-  "å”å±±å¸‚",
-  "ä¸‰äºšå¸‚",
-  "æ¹–å·žå¸‚",
-  "å‘¼å’Œæµ©ç‰¹å¸‚",
-  "å»ŠåŠå¸‚",
-  "æ´›é˜³å¸‚",
-  "å¨æµ·å¸‚",
-  "ç›åŸŽå¸‚",
-  "ä¸´æ²‚å¸‚",
-  "æ±Ÿé—¨å¸‚",
-  "æ±•å¤´å¸‚",
-  "æ³°å·žå¸‚",
-  "æ¼³å·žå¸‚",
-  "é‚¯éƒ¸å¸‚",
-  "æµŽå®å¸‚",
-  "èŠœæ¹–å¸‚",
-  "æ·„åšå¸‚",
-  "é“¶å·å¸‚",
-  "æŸ³å·žå¸‚",
-  "ç»µé˜³å¸‚",
-  "æ¹›æ±Ÿå¸‚",
-  "éžå±±å¸‚",
-  "èµ£å·žå¸‚",
-  "å¤§åº†å¸‚",
-  "å®œæ˜Œå¸‚",
-  "åŒ…å¤´å¸‚",
-  "å’¸é˜³å¸‚",
-  "ç§¦çš‡å²›å¸‚",
-  "æ ªæ´²å¸‚",
-  "èŽ†ç”°å¸‚",
-  "å‰æž—å¸‚",
-  "æ·®å®‰å¸‚",
-  "è‚‡åº†å¸‚",
-  "å®å¾·å¸‚",
-  "è¡¡é˜³å¸‚",
-  "å—å¹³å¸‚",
-  "è¿žäº‘æ¸¯å¸‚",
-  "ä¸¹ä¸œå¸‚",
-  "ä¸½æ±Ÿå¸‚",
-  "æ­é˜³å¸‚",
-  "å»¶è¾¹æœé²œæ—è‡ªæ²»å·ž",
-  "èˆŸå±±å¸‚",
-  "ä¹æ±Ÿå¸‚",
-  "é¾™å²©å¸‚",
-  "æ²§å·žå¸‚",
-  "æŠšé¡ºå¸‚",
-  "è¥„é˜³å¸‚",
-  "ä¸Šé¥¶å¸‚",
-  "è¥å£å¸‚",
-  "ä¸‰æ˜Žå¸‚",
-  "èšŒåŸ å¸‚",
-  "ä¸½æ°´å¸‚",
-  "å²³é˜³å¸‚",
-  "æ¸…è¿œå¸‚",
-  "è†å·žå¸‚",
-  "æ³°å®‰å¸‚",
-  "è¡¢å·žå¸‚",
-  "ç›˜é”¦å¸‚",
-  "ä¸œè¥å¸‚",
-  "å—é˜³å¸‚",
-  "é©¬éžå±±å¸‚",
-  "å—å……å¸‚",
-  "è¥¿å®å¸‚",
-  "å­æ„Ÿå¸‚",
-  "é½é½å“ˆå°”å¸‚"
+  "Î«·»ÊÐ",
+  "±£¶¨ÊÐ",
+  "Õò½­ÊÐ",
+  "ÑïÖÝÊÐ",
+  "¹ðÁÖÊÐ",
+  "ÌÆÉ½ÊÐ",
+  "ÈýÑÇÊÐ",
+  "ºþÖÝÊÐ",
+  "ºôºÍºÆÌØÊÐ",
+  "ÀÈ·»ÊÐ",
+  "ÂåÑôÊÐ",
+  "Íþº£ÊÐ",
+  "ÑÎ³ÇÊÐ",
+  "ÁÙÒÊÊÐ",
+  "½­ÃÅÊÐ",
+  "ÉÇÍ·ÊÐ",
+  "Ì©ÖÝÊÐ",
+  "ÕÄÖÝÊÐ",
+  "ºªµ¦ÊÐ",
+  "¼ÃÄþÊÐ",
+  "ÎßºþÊÐ",
+  "×Í²©ÊÐ",
+  "Òø´¨ÊÐ",
+  "ÁøÖÝÊÐ",
+  "ÃàÑôÊÐ",
+  "Õ¿½­ÊÐ",
+  "°°É½ÊÐ",
+  "¸ÓÖÝÊÐ",
+  "´óÇìÊÐ",
+  "ÒË²ýÊÐ",
+  "°üÍ·ÊÐ",
+  "ÏÌÑôÊÐ",
+  "ÇØ»ÊµºÊÐ",
+  "ÖêÖÞÊÐ",
+  "ÆÎÌïÊÐ",
+  "¼ªÁÖÊÐ",
+  "»´°²ÊÐ",
+  "ÕØÇìÊÐ",
+  "ÄþµÂÊÐ",
+  "ºâÑôÊÐ",
+  "ÄÏÆ½ÊÐ",
+  "Á¬ÔÆ¸ÛÊÐ",
+  "µ¤¶«ÊÐ",
+  "Àö½­ÊÐ",
+  "½ÒÑôÊÐ",
+  "ÑÓ±ß³¯ÏÊ×å×ÔÖÎÖÝ",
+  "ÖÛÉ½ÊÐ",
+  "¾Å½­ÊÐ",
+  "ÁúÑÒÊÐ",
+  "²×ÖÝÊÐ",
+  "¸§Ë³ÊÐ",
+  "ÏåÑôÊÐ",
+  "ÉÏÈÄÊÐ",
+  "Óª¿ÚÊÐ",
+  "ÈýÃ÷ÊÐ",
+  "°ö²ºÊÐ",
+  "ÀöË®ÊÐ",
+  "ÔÀÑôÊÐ",
+  "ÇåÔ¶ÊÐ",
+  "¾£ÖÝÊÐ",
+  "Ì©°²ÊÐ",
+  "áéÖÝÊÐ",
+  "ÅÌ½õÊÐ",
+  "¶«ÓªÊÐ",
+  "ÄÏÑôÊÐ",
+  "Âí°°É½ÊÐ",
+  "ÄÏ³äÊÐ",
+  "Î÷ÄþÊÐ",
+  "Ð¢¸ÐÊÐ",
+  "ÆëÆë¹þ¶ûÊÐ"
 )] <- "3rd tier"
 psu$tier<-
   psu$tier%>%replace_na("4th tier")
@@ -501,22 +480,9 @@ psu <- psu %>%
   )
 
 psu %>% head()
-```
 
-```{r}
-houseprice <- read.dta13("CHARLS2013/price.dta",
-                         fromEncoding = "GB2312",
-                         convert.factors = FALSE)
 
-psu <- psu %>%
-  left_join(houseprice,
-            by = "city") %>%
-  mutate(price = (price)%>%replace_na(3000)) 
-
-psu %>% head()
-```
-
-```{r Merge all 2014}
+## ----Merge all 2014----------------------------------------------------------------------------------------------------------------
 parent_ind <-
   demographic_2015 %>%
   left_join(hukou_2014, by = "id") %>%
@@ -532,11 +498,9 @@ parent_ind_hh <-
   filter(row_number() == 1)
 
 parent_ind_hh %>% head()
-```
 
 
-## Parent hh level data
-```{r ind income}
+## ----ind income--------------------------------------------------------------------------------------------------------------------
 ind_income_raw_2015 <-
   read.dta13(
     "CHARLS2015/Individual_Income.dta",
@@ -601,9 +565,9 @@ ind_income_2015 <- ind_income_raw_2015 %>%
     hd004_w3_1_bracket_max,
     hd004_w3_1_bracket_min
   )
-```
 
-```{r}
+
+## ----------------------------------------------------------------------------------------------------------------------------------
 #replace all NA into 0
 ind_income_2015[is.na(ind_income_2015)] <- 0
 #construct wealth measure
@@ -641,17 +605,17 @@ hh_fin_2015 <- ind_income_2015 %>%
   summarise(asset_fin = sum(ind_fin, na.rm = TRUE))
 
 hh_fin_2015 %>% head()
-```
 
-```{r household income}
+
+## ----household income--------------------------------------------------------------------------------------------------------------
 hh_income_raw_2015 <- read.dta13(
   "CHARLS2015/Household_Income.dta",
   convert.factors = TRUE,
   generate.factors = TRUE
 )
-```
 
-```{r durable and fixed}
+
+## ----durable and fixed-------------------------------------------------------------------------------------------------------------
 hh_durable_fixed_2015 <- hh_income_raw_2015 %>% select(
   hhid = householdID,
   ha057_1_:ha057_4_,
@@ -708,9 +672,9 @@ hh_durable_fixed_2015 <- hh_durable_fixed_2015 %>% select(hhid,
                                           asset_durable_fixed)
 
 hh_durable_fixed_2015 %>% head()
-```
 
-```{r home characteristics 2013}
+
+## ----home characteristics 2013-----------------------------------------------------------------------------------------------------
 hh_income_raw_2013 <-
   read.dta13(
     "CHARLS2013/Household_Income.dta",
@@ -720,9 +684,9 @@ hh_income_raw_2013 <-
 hh_house_2013 <- hh_income_raw_2013 %>%
   select(hhid = householdID,
          buildarea = ha001_w2)
-```
 
-```{r house}
+
+## ----house-------------------------------------------------------------------------------------------------------------------------
 hh_house_2015 <- hh_income_raw_2015 %>% select(
   hhid = householdID,
   samehouse = ha000_w2_1,
@@ -749,9 +713,9 @@ hh_house_2015 <- hh_income_raw_2015 %>% select(
                         brackethigh),
   ) %>%
   left_join(hh_house_2013, by = "hhid")
-```
 
-```{r create home value}
+
+## ----create home value-------------------------------------------------------------------------------------------------------------
 hh_primaryhome_2015 <- hh_house_2015 %>%
   transmute(
     hhid = hhid,
@@ -771,9 +735,9 @@ hh_primaryhome_2015 <- hh_house_2015 %>%
     )
   )
 hh_primaryhome_2015 %>% head()
-```
 
-```{r}
+
+## ----------------------------------------------------------------------------------------------------------------------------------
 hh_otherhome_2015 <- hh_income_raw_2015 %>%
   select(hhid = householdID,
          ha045_1_1_:ha045_1_3_,
@@ -796,9 +760,9 @@ hh_otherhome_2015 <-
       replace_na(0)
   )
 hh_otherhome_2015 %>% head()
-```
 
-```{r}
+
+## ----------------------------------------------------------------------------------------------------------------------------------
 hh_otherhome_2013 <- hh_income_raw_2013 %>%
   select(hhid = householdID,
          ha034_1_1_:ha034_1_4_,
@@ -823,9 +787,9 @@ hh_otherhome_2013 <-
       replace_na(0)
   )
 hh_otherhome_2013 %>% head()
-```
 
-```{r}
+
+## ----------------------------------------------------------------------------------------------------------------------------------
 hh_income_raw_2011 <-
   read.dta13(
     "CHARLS2011/household_income.dta",
@@ -855,9 +819,9 @@ hh_otherhome_2011 <-
       replace_na(0)
   )
 hh_otherhome_2011 %>% head()
-```
 
-```{r}
+
+## ----------------------------------------------------------------------------------------------------------------------------------
 hh_homevalue <-
   hh_primaryhome_2015 %>%
   full_join(hh_otherhome_2015, by = "hhid") %>%
@@ -877,9 +841,9 @@ hh_homevalue <-
       otherhomevalue15
   )
 hh_homevalue %>% head()
-```
 
-```{r}
+
+## ----------------------------------------------------------------------------------------------------------------------------------
 parent_hh <-
   hh_fin_2015 %>%
   full_join(hh_durable_fixed_2015, by = "hhid") %>%
@@ -889,18 +853,16 @@ parent_hh <-
            asset_land +
            asset_durable_fixed)
 parent_hh %>% head()
-```
 
-```{r}
+
+## ----------------------------------------------------------------------------------------------------------------------------------
 parent<- parent_ind_hh %>%
   left_join(parent_hh, by ="hhid")
 
 parent %>% head()
-```
 
 
-## Children ind level data
-```{r import child data, echo=FALSE, warning=FALSE}
+## ----import child data, echo=FALSE, warning=FALSE----------------------------------------------------------------------------------
 child_raw_2015 <-
   read.dta13("CHARLS2015/Child.dta",
              convert.factors = TRUE,
@@ -931,13 +893,13 @@ child_2015 <- child_raw_2015 %>% select(
   ungroup()
 
 child_2015 %>% head()
-```
 
-```{r}
+
+## ----------------------------------------------------------------------------------------------------------------------------------
 child_2015 <-
   child_2015 %>%
   mutate(
-    numchildren = ifelse(marriage == "6 Never Married"ï¼Œ
+    numchildren = ifelse(marriage == "6 Never Married",
                          0,
                          numchildren),
     marriage = marriage %>% fct_recode(
@@ -991,9 +953,9 @@ child_2015 <-
 
 
 child_2015  %>% head()
-```
- 
-```{r}
+
+
+## ----------------------------------------------------------------------------------------------------------------------------------
 spouse_long <-
   demographic_raw_2014 %>%
   select(hhid = householdID,
@@ -1017,15 +979,14 @@ spouse_education <-
            as.numeric() %>%
            recode(0, 3, 4, 6, 9, 12, 12, 15, 16, 18, 21, NULL)
          ) %>%
-  select(hhidï¼Œ
+  select(hhid,
          childid,
          education_years_spouse)
 
 spouse_education %>% head()
-```
-  
 
-```{r}
+
+## ----------------------------------------------------------------------------------------------------------------------------------
 spouse_hukou <-
   spouse_long %>%
   filter(column %>%
@@ -1039,9 +1000,9 @@ spouse_hukou <-
          hukou_spouse)
 
 spouse_hukou %>% head()
-```
 
-```{r Occupation}
+
+## ----Occupation--------------------------------------------------------------------------------------------------------------------
 child_raw_2013 <-
   read.dta13("CHARLS2013/Child.dta",
              convert.factors = TRUE,
@@ -1054,10 +1015,9 @@ child_2013 <-
   mutate(job = job %>% 
            fct_rev()) 
 child_2013 %>% head()
-```
- 
 
-```{r}
+
+## ----------------------------------------------------------------------------------------------------------------------------------
 #buy marriage house
 transfer_raw_2015 <-
   read.dta13("CHARLS2015/Family_Transfer.dta")
@@ -1114,9 +1074,9 @@ child_marriagehome$marriagehome <-
   child_marriagehome$marriagehome %>% as.factor()
 
 child_marriagehome %>% head()
-```
 
-```{r}
+
+## ----------------------------------------------------------------------------------------------------------------------------------
 child_ind <-
   child_2015 %>%
   left_join(spouse_education, by = c("hhid","childid")) %>%
@@ -1126,10 +1086,9 @@ child_ind <-
   distinct()
 
 child_ind %>% head()
-```
 
-## Merged data
-```{r}
+
+## ----------------------------------------------------------------------------------------------------------------------------------
 #merge and resolve name conflict
 merged <-
   child_ind %>%
@@ -1167,15 +1126,12 @@ merged <-
             as.numeric)
 
 merged %>% head()
-```
- 
-```{r}
+
+
+## ----------------------------------------------------------------------------------------------------------------------------------
 summary(merged)
-```
- 
 
-```{r}
+
+## ----------------------------------------------------------------------------------------------------------------------------------
 save(merged, file = "output/merged.RData")
-```
-
 
