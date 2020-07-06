@@ -1,5 +1,7 @@
+*.gitignore
 *.pem
 *.RData
+*.Rhistory
 *.pdf
 CHARLS2011/
 CHARLS2013/
