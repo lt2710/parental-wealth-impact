@@ -187,34 +187,28 @@ cbind(summary_table(dta_independence%>% select(one_of(var.summary))),
 ```{r}
 string.x <-
   paste(
-    #control
+    ##control
     #"urban_child",
-    
-    #child,
-    
+    ##child,
     "age_child",
-    "sex_child",
+    #"sex_child",
     "numchildren",
     "hukou_child",
-    "party_child",
+    #"party_child",
     "education_years_child",
     "job_child_manager",
     "income_logged",
-    
-    #spouse
-    
+    ##spouse
     "education_years_spouse",
-    #"hukou_spouse",
-    
-    #parent family
-    
+    "hukou_spouse",
+    ##parent family
     #"urban_parent",
     "siblings",
     "sibling_rank",
     "education_years_parent",
-    "job_parent",
-    #"hukou_parent",
-    "party_parent",
+    #"job_parent",
+    "hukou_parent",
+    #"party_parent",
     #"asset_total_flag",
     "asset_total_logged",
     sep = " + "
@@ -237,12 +231,17 @@ formula.independence.homevalue <-
 export_summs(
   glm(
     formula.independence.marriagehome,
-    data = dta_independence,
+    data = dta_independence%>%filter(sex_child=="1 Male"),
     family = binomial
   ),
-  error_pos = "same",
-  to.file = "xlsx",
-  file.name = "writing/tables1/table2.formula.independence.marriagehome.demo.xlsx"
+  glm(
+    formula.independence.marriagehome,
+    data = dta_independence%>%filter(sex_child=="2 Female"),
+    family = binomial
+  ),
+  error_pos = "same"
+  #,to.file = "xlsx",
+  #file.name = "writing/tables1/table2.formula.independence.marriagehome.demo.xlsx"
 )
 ```
 
@@ -250,20 +249,17 @@ export_summs(
 export_summs(
   glm(
     formula.independence.ownership,
-    data = dta_independence %>%
-      filter(independence_dummy == "close"),
+    data = dta_independence %>% filter(sex_child=="1 Male"),
     family = binomial
   ),
   glm(
     formula.independence.ownership,
-    data = dta_independence %>%
-      filter(independence_dummy == "other"),
+    data = dta_independence %>%filter(sex_child=="2 Female"),
     family = binomial
   ),
-  error_pos = "same",
-  model.names = c("close", "other"),
-  to.file = "xlsx",
-  file.name = "writing/tables1/table3.formula.independence.ownership.demo.xlsx"
+  error_pos = "same"
+  #,to.file = "xlsx",
+  #file.name = "writing/tables1/table3.formula.independence.ownership.demo.xlsx"
 )
 ```
 
@@ -271,14 +267,12 @@ export_summs(
 ```{r}
 vglm(formula.independence.homevalue,
      tobit(Lower  = 1),
-     data = dta_independence %>%
-       filter(independence_dummy == "close")) %>%
+     data = dta_independence %>%filter(sex_child=="1 Male")) %>%
   summary()
 
 vglm(formula.independence.homevalue,
      tobit(Lower  = 1),
-     data = dta_independence %>%
-       filter(independence_dummy == "other")) %>%
+     data = dta_independence %>%filter(sex_child=="2 Female")) %>%
   summary()
 ```
 
@@ -287,13 +281,13 @@ export_summs(
   lm(
     formula.independence.homevalue,
     data = dta_independence %>%
-      filter(independence_dummy == "close",
+      filter(sex_child=="1 Male",
              ownership ==1)
   ),
   lm(
     formula.independence.homevalue,
     data = dta_independence %>%
-      filter(independence_dummy == "other",
+      filter(sex_child=="2 Female",
              ownership ==1)
   ),
   error_pos = "same",
