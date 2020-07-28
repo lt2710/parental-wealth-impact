@@ -1,0 +1,999 @@
+---
+title: "Childrens' education attainment and parental wealth"
+subtitle: "Impact of parental resources on living standard potential in China"
+author: "Langyi Tian, Columbia University"
+date: "Aug 2019"
+output:
+  xaringan::moon_reader:
+    css: ["default", "default-fonts", "custom_Xaringan.css"]
+    lib_dir: libs
+    nature:
+      ratio: 16:9
+      highlightStyle: github
+      highlightLines: true
+      countIncrementalSlides: false
+---      
+exclude: true
+
+class: left, top
+background-image: url(images/roadmap.png)
+background-size: 100%
+background-position: 50% 280%
+
+###Setup
+```{r setup, include=FALSE}
+#Set up default knitr chunk options
+library("knitr")
+knitr::opts_chunk$set(
+  echo = FALSE,
+  eval = TRUE,
+  message = FALSE,
+  warning = FALSE,
+  fig.height = 9,
+  fig.width = 15,
+  fig.align = "center",
+  cache = TRUE,
+  cache.lazy = FALSE
+)
+options(htmltools.dir.version = FALSE)
+```  
+
+```{r theme-map, include=FALSE}
+#set up theme map
+theme_simplemap <- function(base_size = 9,
+                            base_family = "") {
+  theme_bw(base_size = base_size, base_family = base_family) %+replace%
+    theme(
+      axis.line = element_blank(),
+      axis.text = element_blank(),
+      axis.ticks = element_blank(),
+      axis.title = element_blank(),
+      panel.background = element_blank(),
+      panel.border = element_blank(),
+      panel.grid = element_blank(),
+      panel.spacing = unit(0, "lines"),
+      plot.background = element_blank(),
+      legend.position = "none"
+    )
+}
+```
+
+```{r packages, message = FALSE, warning = FALSE, echo=FALSE}
+# Load packages.
+packages <- c(
+  "tidyr",
+  "dplyr",
+  "GGally",
+  "stringr",
+  "purrr",
+  "readstata13",
+  "data.table",
+  "knitr",
+  "ggplot2",
+  "bit64",
+  "forcats",
+  "tidyverse",
+  "ordinal",
+  "jtools",
+  "quantreg",
+  "TraMineR",
+  "MASS",
+  "magrittr",
+  "qwraps2"
+)
+packages <- lapply(
+  packages,
+  FUN = function(x) {
+    if (!require(x, character.only = TRUE)) {
+      install.packages(x)
+      library(x, character.only = TRUE)
+    }
+  }
+)
+```
+
+```{r set up working directory, echo=FALSE, warning=FALSE}
+#setwd("C:/Users/Administrator/Documents/GitHub/parental-wealth-impact")
+Sys.setlocale("LC_TIME", "C")#Set to debug date transformation
+Sys.setenv(TZ="Europe/Berlin")
+select <- dplyr::select
+```
+
+```{r filter and select final data,echo=TRUE, warning=FALSE}
+load("output/merged_charls.RData")
+```
+
+# Data sources
+ - Chinese Health and Retirement Longitudinal Survey (CHARLS)
+ - Nationally representative sample of Chinese residents ages 45 and above
+ - Parent are respondents
+ - Children information comes from parent's interview (children are not interviewed)
+
+#Comparison
+CHARLS
+ - Rich data in father's education, occupation, income and household registration status over time through Life-history survey
+ - Home value only include the current residing home
+
+##dta_lm_parent and dta_lm_child
+```{r}
+dta_lm_child <-
+  merged_charls %>% filter(
+    urban_child %in% c(
+      "1 Main City Zone",
+      "2 Combination Zone Between Urban And Rural Areas",
+      "3 The Town Center",
+      "4 ZhenXiang Area"
+    ),!independence_child %in% c(
+      "1 This Household, And Economicly Dependent",
+      "2 This Household, But Economicly Independent"
+    ),
+    age_child > 25,
+    age_child < 45,
+    marriage_child=="Married",
+  )
+
+#code negative financial asset to zero
+dta_lm_child$asset_fin[dta_lm_child$asset_fin<0]<-0
+dta_lm_child$net_worth_real[dta_lm_child$net_worth_real<0]<-0
+
+dta_lm_child <-
+  dta_lm_child %>% mutate(
+    income_child_original = income_child,
+    homevalue_child_original = homevalue_child * 10000,
+    homevalue_original =homevalue * 10000,
+    asset_fin_original = asset_fin,
+    asset_durable_fixed_original =asset_durable_fixed, 
+    asset_land_original = asset_land,
+    net_worth_real_original = net_worth_real * 10000
+  )
+
+dta_lm_child <-
+  dta_lm_child %>% mutate(
+    living.same.county = (!independence_child %in% c("6 Other", "7 Abroad")),
+    hukou.same.county = (!hukou_place_child %in% c("5 Other", "6 Abroad")),
+    price_child = price_child * 10000,
+    income_child = log(income_child + 50),
+    homevalue_child = log(homevalue_child * 10000 + 1),
+    homevalue = log(homevalue * 10000 + 1),
+    asset_fin = log(asset_fin + 1),
+    asset_durable_fixed = log(asset_fin + 1),
+    asset_land = log(asset_land + 1),
+    net_worth_real = log(net_worth_real * 10000 + 1),
+    home = (homevalue == 0) %>% as.numeric(),
+    fin = (asset_fin == 0) %>% as.numeric(),
+    land = (asset_land == 0) %>% as.numeric(),
+    durable = (asset_durable_fixed == 0) %>% as.numeric()
+  )
+dta_lm_child$onlychild[dta_lm_child$onlychild == "first child"] <-
+  "later child"
+dta_lm_child$home_child <-
+  (dta_lm_child$home_child %>% as.numeric() * -1 + 3) %>% factor(levels = c(1, 2),
+                                                                 labels = c("No",
+                                                                            "Yes"))
+```
+
+```{r}
+dta_lm_child$job<-dta_lm_child$job_detail%>%as.character()
+dta_lm_child$job[dta_lm_child$job %in% c(
+  "2 Collective Controlled Firm"
+)] <- "6 Collective Controlled Firm"
+
+dta_lm_child$job[dta_lm_child$job %in% c(
+  "1 Government",
+  "6 Army"
+)] <- "5 Government"
+
+dta_lm_child$job[dta_lm_child$job %in% c(
+  "2 Public Institution"
+)] <- "4 Public institution"
+
+dta_lm_child$job[dta_lm_child$job %in% c(
+  "1 State Controlled Firm"
+)] <- "3 State Controlled Firm"
+
+dta_lm_child$job[dta_lm_child$job %in% c(
+  "3 Non-agricultural Employment",
+  "3 NGO",
+  "3 Private Controlled Firm",
+  "4 Hongkong/Macao/Taiwan Controlled Firm",
+  "5 Foreign Controlled Firm",
+  "6 Other",
+  "4 Non-agricultural self-employment",
+  "5 Unpaid Household Business Help",
+  "5 Individual Firm",
+  "7 Individual Household"
+)] <- "2 Private"
+
+dta_lm_child$job[dta_lm_child$job %in% c(
+  "1 Own Agricultural Production and Business",
+  "2 Agricultural Employment",
+  "6 Farmer",
+  "8 Rural Collective Economic Organization"
+)] <- "1 Agricultural"
+
+
+dta_lm_child$job[dta_lm_child$job %in% c(
+  "9 Other"
+)] <- NA
+
+
+dta_lm_child$rank<-dta_lm_child$rank_detail%>%as.character()
+dta_lm_child$rank[dta_lm_child$rank %in% c("1 Worker")] <- "1 Worker"
+
+dta_lm_child$rank[dta_lm_child$rank %in% c("2 Team Leader",
+                                   "3 Section Chief",
+                                   "8 Division Manager")] <- "3 low rank cadre"
+
+dta_lm_child$rank[dta_lm_child$rank %in% c("4 Director of Division",
+                                   "5 Director-general of a bureau or Above",
+                                   "9 General Manager")] <- "4 high rank cadre"
+
+dta_lm_child$rank[dta_lm_child$rank %in% c("10 Other")] <- "missing"
+
+dta_lm_child$rank[is.na(dta_lm_child$rank) == TRUE] <- "missing"
+
+dta_lm_child$rank[dta_lm_child$rank %in% c("6 Village Leader",
+                                           "7 Township Leader")] <-"missing"
+
+```
+
+
+
+###Summary stats
+
+```{r have a glimpce at missing pattern}
+dta_lm_child <- dta_lm_child %>% select(
+  id,
+  #child 2015
+  urban_child,
+  age_child,
+  gender_child,
+  numchildren_child,
+  tier_child,
+  education_years_child,
+  education_years_spouse_child,
+  hukou_child,
+  living.same.county,
+  hukou.same.county,
+  hukou_spouse_child,
+  party_child,
+  income_child,
+  home_child,
+  homevalue_child,
+  price_child,
+  onlychild,
+  marriagehome_child,#this is from 2015 parents
+  #child 2013
+  jobcat_child,
+  #parents 2015
+  address,
+  age,
+  role,
+  home, 
+  homevalue,
+  fin,
+  asset_fin,
+  durable,
+  asset_durable_fixed,
+  land,
+  asset_land,
+  net_worth_real,
+  education_years,#this is a fusion of lots of variables
+  #parents 2014
+  job,
+  rank,
+  hukou,
+  party
+)
+library(finalfit)
+dta_lm_child %>% ff_glimpse()
+```
+
+####missingness of parental generation
+```{r}
+dta_lm_child %>% select(job, hukou, party) %>% missing_pattern()
+```
+
+```{r}
+dependent <- "job"
+explanatory <-  c(
+  "age_child",
+  "education_years_child",
+  "income_child",
+  "homevalue_child",
+  "education_years",
+  "net_worth_real"
+)
+dta_lm_child %>% missing_compare(dependent,
+                                 explanatory)
+```
+
+```{r}
+dependent <- "jobcat_child"
+explanatory <-  c(
+  "age_child",
+  "education_years_child",
+  "income_child",
+  "homevalue_child",
+  "education_years",
+  "net_worth_real"
+)
+dta_lm_child %>% missing_compare(dependent,
+                                 explanatory)
+```
+
+```{r}
+dependent <- "hukou"
+dta_lm_child %>% missing_compare(dependent,
+                                 explanatory)
+```
+
+these missingnesss are very problematic. drop them.
+
+####missingness of continous variables
+```{r}
+dta_lm_child %>% select(education_years_spouse_child,
+                        jobcat_child,
+                        income_child, 
+                        homevalue_child) %>% missing_pattern()
+```
+
+```{r}
+dependent <- "income_child"
+full <- c(
+  "education_years_spouse_child",
+  "age_child",
+  "education_years_child",
+  "income_child",
+  "homevalue_child",
+  "education_years",
+  "net_worth_real"
+)
+explanatory <-  setdiff(
+  full,
+  dependent
+)
+dta_lm_child %>% missing_compare(dependent,
+                                 explanatory)
+```
+
+income child is problematic
+
+```{r}
+dependent <- "homevalue_child"
+explanatory <-  setdiff(
+  full,
+  dependent
+)
+dta_lm_child %>% missing_compare(dependent,
+                                 explanatory)
+```
+
+```{r}
+dependent <- "education_years"
+explanatory <-  setdiff(
+  full,
+  dependent
+)
+dta_lm_child %>% missing_compare(dependent,
+                                 explanatory)
+```
+
+```{r}
+dependent <- "education_years_spouse_child"
+explanatory <-  setdiff(
+  full,
+  dependent
+)
+dta_lm_child %>% missing_compare(dependent,
+                                 explanatory)
+```
+
+```{r}
+dependent <- "net_worth_real"
+explanatory <-  setdiff(
+  full,
+  dependent
+)
+dta_lm_child %>% missing_compare(dependent,
+                                 explanatory)
+```
+
+these can be fixed through MICE.
+
+```{r}
+dta_lm_child<-dta_lm_child%>%filter(is.na(hukou)==FALSE,)
+dta_lm_child%>%missing_glimpse()
+```
+
+```{r mice imputatoin with random forest}
+for (i in names(dta_lm_child)){
+  if (class(dta_lm_child[[i]])=="character"){
+    dta_lm_child[[i]]<-dta_lm_child[[i]]%>%as.factor()
+  }
+}
+library(mice)
+dta_imputed<-parlmice(dta_lm_child%>%select(-id), m =5, maxit=5, seed=1, method="pmm")
+dta<-complete(dta_imputed)
+dta<-cbind(id=dta_lm_child$id%>%as.numeric(),
+           dta)%>%as.data.frame()
+```
+
+```{r}
+dta_lm_child<-dta%>%select(age_child,
+                           gender_child,
+                           onlychild,
+                           education_years_child,
+                           hukou_child,
+                           party_child,
+                           jobcat_child,
+                           income_child,
+                           home_child,
+                           marriagehome_child,
+                           homevalue_child,
+                           tier_child,
+                           price_child,
+                           age,
+                           role,
+                           education_years,
+                           hukou,
+                           party,
+                           job,
+                           rank,
+                           home,
+                           net_worth_real,
+                           address,
+                           everything())
+options(qwraps2_markup = "markdown")
+summary.stats<-cbind(summary_table(dta_lm_child),
+                     summary_table(dta_lm_child%>%filter(hukou=="0 rural hukou")),
+                     summary_table(dta_lm_child%>%filter(hukou=="1 urban hukou"))
+)
+
+summary.stats
+```
+
+```{r,eval=FALSE}
+dta_lm_child %>% group_by(hukou,
+                          hukou_child,
+                          living.same.county
+                          #education_years_child > 12
+                          ) %>% summarise(
+                            num = n(),
+                            mean(education_years_child)%>%round(),
+                            median(income_child)%>%round(),
+                            mean(net_worth_real)%>%round(),
+                            mean(home_child %>% as.numeric() - 1)%>%round(2),
+                            mean(homevalue)%>%round(),
+                            mean(asset_fin)%>%round(),
+                            mean(homevalue_child)%>%round()
+                          ) %>% filter(num > 100) %>% view()
+```
+
+```{r}
+ glm(
+  home_child ~
+    #children
+    price_child +
+    age_child +
+    gender_child + 
+    onlychild +
+    numchildren_child +
+    education_years_child +
+    hukou_child+
+    hukou_spouse_child+
+    party_child +
+    jobcat_child +
+    (income_child+50)%>%log() +
+    #father
+    education_years +
+    hukou+
+    living.same.county+
+    living.same.county:hukou_child+
+    hukou.same.county+
+    job+
+    party + 
+    (net_worth_real + 1) %>% log()+
+    ((net_worth_real + 1) %>% log()):living.same.county+
+    ((net_worth_real + 1) %>% log()):hukou.same.county
+    #(asset_fin + 1) %>% log()+
+    #(asset_durable_fixed + 1) %>% log()+
+    #land+
+    #(asset_land + 1) %>% log()
+  ,
+  data = dta_lm_child%>%filter(marriagehome_child=="No marriage home"),
+  family = binomial(link = "logit")
+)%>%export_summs(error_pos = "same")
+```
+
+```{r}
+a1<-lm(
+  homevalue_child ~
+    #children
+    price_child +
+    urban_child+
+    age_child +
+    gender_child + 
+    onlychild +
+    numchildren_child +
+    education_years_child +
+    education_years_spouse_child+
+    hukou_child+
+    hukou_spouse_child+
+    party_child +
+    jobcat_child +
+    income_child 
+  ,
+  data = dta_lm_child %>% filter(homevalue_child>0,
+                                 hukou=="0 rural hukou")
+)
+
+a2<-lm(
+  homevalue_child ~
+    #children
+    price_child +
+    urban_child+
+    age_child +
+    gender_child + 
+    onlychild +
+    numchildren_child +
+    education_years_child +
+    education_years_spouse_child+
+    hukou_child+
+    hukou_spouse_child+
+    party_child +
+    jobcat_child +
+    income_child +
+    #father
+    education_years+
+    job+
+    party + 
+    homevalue+
+    asset_fin
+  ,
+  data = dta_lm_child %>% filter(homevalue_child>0,
+                                 hukou=="0 rural hukou")
+)
+
+b1<-lm(
+  homevalue_child ~
+    #children
+    price_child +
+    urban_child+
+    age_child +
+    gender_child + 
+    onlychild +
+    numchildren_child +
+    education_years_child +
+    education_years_spouse_child+
+    hukou_child+
+    hukou_spouse_child+
+    party_child +
+    jobcat_child +
+    income_child 
+  ,
+  data = dta_lm_child %>% filter(homevalue_child>0,
+                                 hukou=="1 urban hukou")
+)
+
+b2<-lm(
+  homevalue_child ~
+    #children
+    price_child +
+    urban_child+
+    age_child +
+    gender_child + 
+    onlychild +
+    numchildren_child +
+    education_years_child +
+    education_years_spouse_child+
+    hukou_child+
+    hukou_spouse_child+
+    party_child +
+    jobcat_child +
+    income_child +
+    #father
+    education_years+
+    job+
+    party + 
+    homevalue+
+    asset_fin
+  ,
+  data = dta_lm_child %>% filter(homevalue_child>0,
+                                 hukou=="1 urban hukou")
+)
+
+export_summs(a1,a2,
+             b1,b2,error_pos = "same")
+```
+
+
+#Children home ownership regression
+###marriage transfer
+```{r}
+dta_lm_child$marriagehome <- NA
+dta_lm_child$marriagehome[dta_lm_child$marriagehome_child == "Parent buy marriage home"] <-
+  1
+dta_lm_child$marriagehome[dta_lm_child$marriagehome_child == "No marriage home"] <-
+  0
+
+glm_pa1 <- glm(
+  marriagehome ~
+    #children
+    price_child +
+    urban_child+
+    age_child +
+    gender_child + 
+    onlychild +
+    numchildren_child +
+    education_years_child +
+    education_years_spouse_child+
+    hukou_child+
+    hukou_spouse_child+
+    party_child +
+    jobcat_child +
+    income_child +
+    #father
+    education_years+
+    job+
+    party + 
+    homevalue+
+    asset_fin
+    ,
+  data = dta_lm_child%>%filter(hukou=="0 rural hukou"),
+  family = binomial(link = "logit")
+)
+
+glm_pa2 <- glm(
+  marriagehome ~
+    #children
+    price_child +
+    urban_child+
+    age_child +
+    gender_child + 
+    onlychild +
+    numchildren_child +
+    education_years_child +
+    education_years_spouse_child+
+    hukou_child+
+    hukou_spouse_child+
+    party_child +
+    jobcat_child +
+    income_child +
+    #father
+    education_years+
+    job+
+    party + 
+    homevalue+
+    asset_fin
+    ,
+  data = dta_lm_child%>%filter(hukou=="1 urban hukou"),
+  family = binomial(link = "logit")
+)
+
+export_summs(glm_pa1,
+             glm_pa2,
+             error_pos = "same")
+```
+
+###ownership
+
+```{r}
+glm_a <- glm(
+  home_child ~ 
+    #children
+    price_child +
+    urban_child+
+    age_child +
+    gender_child + 
+    onlychild +
+    numchildren_child +
+    education_years_child +
+    education_years_spouse_child+
+    hukou_child+
+    hukou_spouse_child+
+    party_child +
+    jobcat_child +
+    income_child +
+    #father
+    education_years+
+    job+
+    party + 
+    net_worth_real+
+    marriagehome_child
+  ,
+  data = dta_lm_child%>%filter(hukou=="0 rural hukou"),
+  family = binomial(link = "logit")
+)
+
+glm_b <- glm(
+  home_child ~ 
+    #children
+    price_child +
+    urban_child+
+    age_child +
+    gender_child + 
+    onlychild +
+    numchildren_child +
+    education_years_child +
+    education_years_spouse_child+
+    hukou_child+
+    hukou_spouse_child+
+    party_child +
+    jobcat_child +
+    income_child +
+    #father
+    education_years+
+    job+
+    party + 
+    net_worth_real+
+    marriagehome_child
+  ,
+  data = dta_lm_child%>%filter(hukou=="1 urban hukou"),
+  family = binomial(link = "logit") 
+)
+
+export_summs(
+  glm_a,
+  glm_b, 
+  error_pos = "same"
+)
+```
+
+##Child homevalue
+```{r}
+lm_a <- lm(
+  (homevalue_child + 1)%>%log() ~
+    #children
+    price_child +
+    age_child +
+    gender_child + 
+    onlychild +
+    numchildren_child +
+    education_years_child +
+    education_years_spouse_child+
+    hukou_child+
+    hukou_spouse_child+
+    gender_child:hukou_spouse_child+
+    party_child +
+    jobcat_child +
+    (income_child+50)%>%log() 
+  ,
+  data = dta_lm_child %>% filter(homevalue_child>0)
+)
+
+lm_b <- lm(
+  (homevalue_child + 1)%>%log() ~
+    #children
+    price_child +
+    age_child +
+    gender_child + 
+    onlychild +
+    numchildren_child +
+    education_years_child +
+    hukou_child+
+    hukou_spouse_child+
+    gender_child:hukou_spouse_child+
+    party_child +
+    jobcat_child +
+    (income_child+50)%>%log() +
+    #father
+    education_years +
+    job+
+    rank +
+    party + 
+    (homevalue + 1) %>% log()+
+    (asset_fin + 1) %>% log()+
+    (asset_durable_fixed + 1) %>% log()+
+    land+
+    (asset_land + 1) %>% log()
+  ,
+  data = dta_lm_child %>% filter(homevalue_child>0,
+                                 living.same.county==FALSE)
+)
+
+lm_c <- lm(
+  (homevalue_child + 1)%>%log() ~
+    #children
+    price_child +
+    age_child +
+    gender_child + 
+    onlychild +
+    numchildren_child +
+    education_years_child +
+    hukou_child+
+    hukou_spouse_child+
+    gender_child:hukou_spouse_child+
+    party_child +
+    jobcat_child +
+    (income_child+50)%>%log() +
+    #father
+    education_years +
+    job+
+    rank +
+    party + 
+    (homevalue + 1) %>% log()+
+    (asset_fin + 1) %>% log()+
+    (asset_durable_fixed + 1) %>% log()+
+    land+
+    (asset_land + 1) %>% log()
+  ,
+  data = dta_lm_child %>% filter(homevalue_child>0,
+                                 living.same.county==TRUE)
+)
+ 
+export_summs(
+  #lm_a,
+  lm_b,
+  lm_c, 
+  error_pos = "same",
+  to.file = "Word",
+  file.name = "output/lm_ab.docx"
+)
+```
+
+```{r, eval=FALSE}
+library(sjstats)
+std_beta(lm_a)
+std_beta(lm_b)
+```
+
+---
+##Landscape of wealth studies
+ - Wealth studies have moved from its "infancy" to "adolescence" since 2000
+ 
+ - Extensively studied in advanced societies (U.S., Sweden, Denmark, etc.) and developing socities with high degree of privatization and marketization (Chile, Mexico, India, etc.)
+ 
+ - Studies portrayed wealth's consequence (educational, occupational attainment, home ownership, etc.), process of wealth accumulations, ascribed traits as wealth determinants, etc.
+
+##China as a new observatory
+ - Post-socialist trajectory: double-digit economic boom and skyrocketing economic inequality
+ 
+ - Initial wave of wealth inequality and absence of gift/inheritance taxation
+ 
+ - Radical marketization and privatization of public welfare in housing, education, etc.
+ 
+ - The returns to capital start to exceed those to labor and capital is more mobile than labor
+
+???
+China has its private wealth rose from around 100% of national income in 1978 to over 450% of national income in 2014, reaching a level close to that in France, the United States, and the UK
+
+---
+##The impact of parental resources on children's living standard potential in Chinese society
+ - Indirect impact: education attainment as a proxy of human capital for labor market return
+ 
+ - Direct impact: home ownership and housing wealth as a proxy of stock economic resources
+
+
+---
+##Data
+ - The China Health and Retirement Longitudinal Study (CHARLS), conducted by China Center for Economic Research at Peking University
+ 
+ - A nationally representative social survey on adults over 45 years old
+ 
+ - Variables construced from information in 2013, 2014, 2015 wave
+
+ - Constructed child-father pairs of respondents and their children
+ 
+ - Focal point on children residing in city zone and rural-urban fringe
+ 
+ - Excluding children with dependence on parental household (co-residence or financial reliance on parents)
+
+---
+##Profile of parents and children generation (mean and sd)
+.pull-left[
+Children
+ - Average birth year 1980 (sd 6.7)
+ 
+ - Years of schooling 10.6 (4.1) yrs
+ 
+ - 8% only child
+ 
+ - 92% married
+ 
+ - 53% with urban hukou
+ 
+ - 15% with party membership
+ 
+ - 65% owns home
+ 
+ - Home value medians 320k among home owners
+]
+
+.pull-right[
+Fathers
+ - Average birth year 1951 (sd 8.6) yrs old
+ 
+ - Years of schooling 7.7 (4.1) yrs
+ 
+ - 35% residing in urban area, among whom 36% hold urban hukou
+ 
+ - 7% with party membership
+ 
+ - 81% owns residing home
+ 
+ - With different household registration/hukou and occupational trajectories
+ 
+ - Averaging ¥170k, housing asset as majority
+]
+ - Categories from K-means clustering of optimal matching sequences 
+
+---
+##Education in China since reform
+ - Diploma credentials are crucial for labor market performance
+ 
+ - Universal primary and secondary education (9 yrs) basically achieved
+ 
+ - Radical expansion, privatization and stratification of tertiary education since 1999
+ 
+ - Evidence supporting Maximally Maintained Inequality (MMI) thesis
+ 
+---
+```{r, eval=FALSE}
+jtools::plot_summs(
+  lm_edu1,
+  lm_edu2,
+  lm_edu3,
+  lm_edu4,
+  coefs = c(
+    "Child: Age (years)" = "age_child",
+    "Male (base: female)" = "gender_childMale",
+    "Only child (base: multiple children family)" =
+      "onlychildonly child",
+    "Father: years of schooling (unit: year)" =
+      "education_years",
+    "Parental asset: home (logged)" =
+      "(homevalue + 1) %>% log()",
+    "Parental asset: fin (logged)" =
+      "(asset_fin + 1) %>% log()",
+    "Parental asset: durable and fixed (logged)" =
+      "(asset_durable_fixed + 1) %>% log()",
+    "Parental asset: land (logged)" =
+      "(asset_land + 1) %>% log()"
+  ),
+  legend.title = "Model",
+  ci_level = 0.95,
+  colors = "Set1",
+  point.shape = FALSE,
+  model.names = c(
+    "All cities",
+    "Tier 1/2",
+    "Tier 3",
+    "Tier 4"
+  )
+) +
+  ggtitle("Parental resource effect on years of schooling completed",
+          subtitle = "Chinese urban residents age 25-50, 2015") +
+  xlab("Additive OLS estimate with 95% confidence level (years)") +
+  ylab("") +
+  labs(caption = "Omitted control for child age") +
+  theme_classic() +
+  theme(text = element_text(size = 20)) +
+  theme(legend.position = "bottom")
+```
+
+---
+##Linkage between wealth and education
+ - Different compositions of impact at different positions in wealth distribution
+ 
+ - Insurance mechanism: wealth mitigates the risks involved in decisions about specific educational transitions
+ 
+ - Purchasing mechanism: purchase of educational goods/services
+
+
+---
+##Thoughts and forward
+ - Higher stock of net worth from parents positively mediate educational attainment of offspring controling other cultural, occupational and institutional advantages
+ 
+ - Parental economic resources become more pronouncing, translating to indirect advantage of educational attainment for further building of better life chance and living standard, undermining education's role in facilitating equity and mobility
+
+ - The impact might expand if the opportunity structure in Chinese society continue to increasingly rewards more for human capital and economic power (while less for political capital and institutional advantage)
+ 
+ - Such transmission might constitute part of a chain from the political/institutional advantage at parental generation to the converted economic power, then to the persistence of it in the offpsring
+
+ - The mechanism is embedded in the process of China's macro-structural social transformation in the past decades, which would reveal how the priviledged manage to pass on their resources
+
+
+
+
+

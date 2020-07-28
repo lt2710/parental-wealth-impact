@@ -1,0 +1,1454 @@
+---
+title: "CHARLS Data processing"
+author: "Langyi Tian"
+output: html_document
+---      
+###Setup
+```{r setup}
+rm(list = ls())#clear environment
+wd <- "C:/Users/Administrator/Documents/GitHub/parental-wealth-impact"#set working directory
+#Set up default knitr chunk options
+library("knitr")
+knitr::opts_chunk$set(
+  echo = FALSE,
+  eval = TRUE,
+  message = FALSE,
+  warning = FALSE,
+  cache = TRUE,
+  cache.lazy = FALSE
+)
+options(htmltools.dir.version = FALSE)
+#Set time variables to debug date transformation
+Sys.setlocale("LC_TIME", "C")
+Sys.setenv(TZ="Europe/Berlin")
+```  
+
+```{r packages, message = FALSE}
+# Load packages.
+packages <- c(
+  "readstata13",
+  "knitr",
+  "bit64",
+  "tidyverse"
+)
+packages <- lapply(
+  packages,
+  FUN = function(x) {
+    if (!require(x, character.only = TRUE)) {
+      install.packages(x)
+      library(x, character.only = TRUE)
+    }
+  }
+)
+select <- dplyr::select
+```
+
+###Parental information
+```{r import 2015 demographics}
+demographic_raw_2015 <-
+  read.dta13(
+    "CHARLS2015/Demographic_Background.dta",
+    convert.factors = TRUE,
+    generate.factors = TRUE
+  )
+demographic_2015 <- demographic_raw_2015 %>%
+  select(
+    id = ID,
+    hhid = householdID,
+    communityID,
+    sex = ba000_w2_3,
+    birthyear = ba004_w3_1,
+    last_address = bb000_w3_2,
+    address_change = bb001_w3,
+    new_address = bb001_w3_2
+  )
+```
+
+```{r}
+#generate age at 2015
+demographic_2015 <-
+  demographic_2015 %>%
+  mutate(age = 2015 - birthyear) %>%
+  select(-birthyear)
+#generate accurate address
+demographic_2015 <- demographic_2015 %>%
+  mutate(address = ifelse(
+    address_change == "1 ZLocation",
+    last_address %>% as.character(),
+    ifelse(
+      address_change == "2 Other Province/City/County Township Villiage/Neiborhood	",
+      new_address %>% as.character(),
+      NA
+    )
+  )) %>%
+  select(-last_address,-address_change,-new_address)
+
+demographic_2015
+```
+ 
+```{r import 2014 demographics}
+demographic_raw_2014 <-
+  read.dta13(
+    "CHARLS2014/Demographic_Background.dta",
+    convert.factors = TRUE,
+    generate.factors = TRUE
+  )
+residence_2014 <-
+  read.dta13(
+    "CHARLS2014/Residence.dta",
+    convert.factors = TRUE,
+    generate.factors = TRUE
+  ) %>%
+  select(id = ID,
+         birthyear = rbirthyear)
+```
+
+
+```{r}
+load("output/retire_year.RData")
+#subset hukou data
+hukou_2014 <- demographic_raw_2014 %>% select(
+  id = ID,
+  hhid = householdID,
+  sex = rgender,
+  hukoutype,#original type
+  hk002_1_1_:hk002_1_6_,#year of change
+  hk004_1_:hk004_6_#new type
+) %>%
+  left_join(residence_2014, by = "id") 
+
+hukou_2014 <- hukou_2014%>% left_join(retire_year, by="id")
+hukou_2014 <- hukou_2014 %>% select(
+  id,
+  hhid,
+  birthyear,
+  hukoutype,
+  hk002_1_1_,
+  hk004_1_,
+  hk002_1_2_,
+  hk004_2_,
+  hk002_1_3_,
+  hk004_3_,
+  hk002_1_4_,
+  hk004_4_,
+  hk002_1_5_,
+  hk004_5_,
+  hk002_1_6_,
+  hk004_6_,
+  start_year,
+  end_year
+)
+hukou_raw <- NULL
+for (i in 1:nrow(hukou_2014)) {
+  seq_raw <- cbind(
+    c(
+      hukou_2014$birthyear[i],
+      hukou_2014$hk002_1_1_[i],
+      hukou_2014$hk002_1_2_[i],
+      hukou_2014$hk002_1_3_[i],
+      hukou_2014$hk002_1_4_[i],
+      hukou_2014$hk002_1_5_[i],
+      hukou_2014$hk002_1_6_[i],
+      2015
+    ),
+    c(
+      hukou_2014$hukoutype[i],
+      hukou_2014$hk004_1_[i],
+      hukou_2014$hk004_2_[i],
+      hukou_2014$hk004_3_[i],
+      hukou_2014$hk004_4_[i],
+      hukou_2014$hk004_5_[i],
+      hukou_2014$hk004_6_[i],
+      "aha"
+    )
+  ) %>% as.data.frame() %>% na.omit()
+  a <- seq_raw %>% mutate(length = NA,
+                          V1 = V1 %>% as.character() %>% as.numeric())
+  for (j in 1:(nrow(a) - 1)) {
+    if (a$V1[j] < a$V1[j + 1]) {
+      a$length[j] <-
+        seq(a$V1[j], a$V1[j + 1], 1) %>% intersect(seq(hukou_2014$start_year[i]%>%as.character()%>%as.numeric(), 
+                                                       hukou_2014$end_year[i]%>%as.character()%>%as.numeric(), 1)) %>% length()
+    } else {
+      a$length[j] <- 0
+    }
+  }
+  a <- a[-nrow(a),]
+  a <- a[order(a$length, decreasing = TRUE),]
+  record <- c(hukou_2014$id[i]%>% as.character(),
+              a$V2[1] %>% as.character())
+  hukou_raw <- rbind(hukou_raw, record)
+}
+hukou_2014 <- hukou_raw %>% as.data.frame() %>% transmute(id = V1 %>% as.character(),
+                                                      hukou = V2 %>% as.character())
+hukou_2014$hukou[hukou_2014$hukou %in% c("2 Non-agricultural Hukou")] <-
+  "1 urban hukou"
+hukou_2014$hukou[hukou_2014$hukou  %in% c( "1 Agricultural Hukou","3 Unified Residence Hukou", "4 None")] <- "0 rural hukou"
+save(hukou_2014, file = "output/hukou_2014.RData")
+```
+
+```{r}
+load("output/hukou_2014.RData")
+```
+
+```{r party}
+#Select variable
+party_2014 <- demographic_raw_2014 %>% select(id = ID,
+                                              p022s1)
+party_2014 <- party_2014 %>% mutate(id = id %>% as.character(),
+                                    p022s1 = p022s1 %>% as.character)
+party_2014$party <- 0
+party_2014$party[party_2014$p022s1 == "1 The Respondent"] <- 1
+party_2014$party <- party_2014$party %>% factor(levels = c(0, 1),
+                                                labels = c("Not party member",
+                                                           "Party member"))
+party_2014 <- party_2014 %>% select(id,
+                                    party)
+```
+
+```{r education 2015}
+education_raw_2015 <- read.dta13("CHARLS2015/Demographic_Background.dta")
+education_2015 <- education_raw_2015 %>% select(id = ID,
+                                                education15 = bd001_w2_4) %>%
+  mutate(education15 = education15 %>% as.character())
+education_2015$education15[education_2015$education15 == "12 No Change"] <-
+  NA
+```
+
+
+```{r edu 2014}
+education_raw_2014 <- read.dta13("CHARLS2014/Education_History.dta")
+education_2014 <- education_raw_2014 %>% select(id = ID,
+                                                e000s1:e000s12)
+#Transform variables
+for (i in names(education_2014)) {
+  education_2014[[i]] <- education_2014[[i]] %>% as.character()
+  education_2014[[i]][is.na(education_2014[[i]]) == TRUE] <-
+    "missing"
+}
+#Recode education
+education_2014$education14 <- NA
+for (i in 1:nrow(education_2014)) {
+  for (j in c(
+    "e000s1",
+    "e000s2",
+    "e000s3",
+    "e000s4",
+    "e000s5",
+    "e000s6",
+    "e000s7",
+    "e000s8",
+    "e000s9",
+    "e000s10",
+    "e000s11",
+    "e000s12"
+  )) {
+    if (education_2014[[j]][i] != "missing") {
+      education_2014$education14[i] <- education_2014[[j]][i]
+    }
+  }
+}
+education_2014$education14[education_2014$education14 == "missing"] <- NA
+education_2014<-education_2014%>%select(id,
+                                        education14)
+```
+
+
+```{r edu 2013}
+education_raw_2013 <- read.dta13("CHARLS2013/Demographic_Background.dta")
+education_2013 <- education_raw_2013 %>% select(id = ID,
+                                                zbd001,
+                                                education13=bd001)
+for (i in 1:nrow(education_2013)) {
+  if (is.na(education_2013$education13[i])==TRUE){
+    education_2013$education13[i]<-education_2013$zbd001[i]
+  }
+}
+education_2013<-education_2013%>%select(id,
+                                        education13)
+```
+
+```{r}
+education_merged <-
+  left_join(education_2015, education_2014, by = "id")
+education_merged <-
+  left_join(education_merged, education_2013, by = "id")
+for (i in 1:nrow(education_merged)) {
+  if (is.na(education_merged$education15[i]) == TRUE &
+      is.na(education_merged$education14[i]) == FALSE) {
+    education_merged$education15[i] <- education_merged$education14[i]%>%as.character()
+  } else if (is.na(education_merged$education15[i]) == TRUE &
+             is.na(education_merged$education13[i]) == FALSE) {
+    education_merged$education15[i] <- education_merged$education13[i]%>%as.character()
+  }
+}
+education_2014 <- education_merged %>% select(id,
+                                              education = education15)
+#this is called 2014 but is actually a merged data out of 13 14 and 15!!
+```
+
+```{r}
+education_2014$education_years <- NA
+education_2014$education_years[education_2014$education == "1 Home School" |
+                                 education_2014$education == "1 No Formal Education (Illiterate)" |
+                                 education_2014$education == "1 No formal education illiterate" |
+                                 education_2014$education == "2 Did not finish primary school but capable of reading or writing" |
+                                 education_2014$education == "2 Did Not Finish Primary School But Capable of Reading/Writing" |
+                                 education_2014$education == "2 Kindergarten" |
+                                 education_2014$education == "12 None"] <-
+  1
+education_2014$education_years[education_2014$education == "3 Preschool" |
+                                 education_2014$education == "3 Sichu/Home School"] <-
+  3
+education_2014$education_years[education_2014$education == "4 Primary School"|
+                                 education_2014$education == "Elementary school"|
+                                 education_2014$education == "Elementary School"] <-
+  
+  6
+education_2014$education_years[education_2014$education == "5 Middle School"|
+                                 education_2014$education == "5 Middle school"] <-
+  9
+education_2014$education_years[education_2014$education == "6 High School"|
+                                 education_2014$education == "6 High school"] <-
+  12
+education_2014$education_years[education_2014$education == "7 Vocational School"|
+                                 education_2014$education == "7 Vocational school"] <-
+  11
+education_2014$education_years[education_2014$education == "8 Three-year College"|
+                                 education_2014$education == "8 Two/Three Year College / Associate degree"|
+                                 education_2014$education == "8 Two/Three Year College/Associate Degree"] <-
+  15
+education_2014$education_years[education_2014$education == "9 Four-year College"|
+                                 education_2014$education == "9 Four-year College/Bachelor's Degree"|
+                                 education_2014$education == "9 Four Year College / Bachelors degree"] <-
+  16
+education_2014$education_years[education_2014$education == "10 Master"|
+                                 education_2014$education == "10 Post-graduate, Masters degree"|
+                                 education_2014$education == "10 Master's Degree"] <-
+  19
+education_2014$education_years[education_2014$education == "11"|
+                                 education_2014$education == "11 Post-graduate, Ph.D."] <- 22
+```
+
+```{r}
+education_2014$education[education_2014$education == "1 Home School" |
+                           education_2014$education == "2 Kindergarten" |
+                           education_2014$education == "3 Preschool" |
+                           education_2014$education == "4 Primary School" |
+                           education_2014$education == "12 None"] <- 1
+education_2014$education[education_2014$education == "5 Middle School" |
+                           education_2014$education == "6 High School"] <-
+  2
+education_2014$education[education_2014$education == "7 Vocational School" |
+                           education_2014$education == "8 Three-year College"] <-
+  3
+education_2014$education[education_2014$education == "9 Four-year College" |
+                           education_2014$education == "10 Master" |
+                           education_2014$education == "11"] <- 4
+education_2014$education <-
+  education_2014$education %>% factor(
+    levels = c(1:4),
+    labels = c(
+      "1 Below middle school",
+      "2 Middle and High school",
+      "3 Voc/3 yrs college",
+      "4 Bachelor and above"
+    )
+  )
+education_2014 <- education_2014 %>% select(id,
+                                            education,
+                                            education_years)
+```
+
+```{r occupation}
+work_raw_2014 <- read.dta13("CHARLS2014/Work_History.dta")
+```
+
+```{r}
+work_2014 <- work_raw_2014 %>% select(
+  id = ID,
+  hhid = householdID,
+  f_2_1_0_:f_2_1_18_,
+  #Start year for job 1-18
+  f_2_5_0_:f_2_5_18_,
+  #End year
+  f_3_0_:f_3_18_,
+  #Job category
+  f104_0_:f104_18_,
+  #Job category detailed
+  f105_0_:f105_14_,
+  #detail firm
+  f110_0_:f110_15_,
+  #rank at start
+  f110_a_1_:f110_a_8_,
+  #rank at middle
+  f124_0_:f124_15_
+  #rank at end
+) 
+work_2014 <- work_2014 %>% mutate(id = id %>% as.character())
+work <- NULL
+for (i in 1:nrow(work_2014)) {
+  seq_full <- NULL
+  for (j in 0:18) {
+    start <- paste("f_2_1_", j, "_", sep = "")
+    end <- paste("f_2_5_", j, "_", sep = "")
+    cat1 <- paste("f_3_", j, "_", sep = "")
+    cat2 <- paste("f104_", j, "_", sep = "")
+    cat3 <- paste("f105_", j, "_", sep = "")
+    cat4 <- paste("f110_", j, "_", sep = "")
+    cat5 <- paste("f110_a_", j, "_", sep = "")
+    cat6 <- paste("f124_", j, "_", sep = "")
+    job <- NA
+    role <- NA
+    start_year <- work_2014[[start]][i]
+    if (is.na(start_year) == FALSE &
+        is.na(work_2014[[cat1]][i]) == FALSE) {
+      if (is.na(work_2014[[end]][i]) == FALSE) {
+        end_year <- work_2014[[end]][i]
+      } else{
+        end_year <- 2014
+      }
+      duration <- end_year - start_year
+      if (is.na(duration) == FALSE & duration < 0) {
+        b<-end_year
+        a<-start_year
+        start_year<-b
+        end_year<-a
+        print(c(
+          work_2014$id[i],
+          "switch start/end year due to data mistake"
+        ))
+      }
+      job <- work_2014[[cat1]][i] %>% as.character()
+      if (job %in% c("2 Agricultural Employment",
+                     "3 Non-agricultural Employment")) {
+        if (is.null(work_2014[[cat2]][i]) == FALSE) {
+          if (is.na(work_2014[[cat2]][i]) == FALSE) {
+            job <- work_2014[[cat2]][i] %>% as.character()
+          }
+        }
+        if (is.null(work_2014[[cat4]][i]) == FALSE) {
+          if (is.na(work_2014[[cat4]][i]) == FALSE) {
+            role <- work_2014[[cat4]][i] %>% as.character()
+          }
+        }
+        if (is.null(work_2014[[cat5]][i]) == FALSE) {
+          if (is.na(work_2014[[cat5]][i]) == FALSE) {
+            role <- work_2014[[cat5]][i] %>% as.character()
+          }
+        }
+        if (is.null(work_2014[[cat6]][i]) == FALSE) {
+          if (is.na(work_2014[[cat6]][i]) == FALSE) {
+            role <- work_2014[[cat6]][i] %>% as.character()
+          }
+        }
+      }
+      #role<- work_2014[[cat4]][i] %>% as.character()
+      if (job %in% c("4 Firm")) {
+        job <- work_2014[[cat3]][i] %>% as.character()
+      }
+      if (is_empty(start_year) == TRUE) {
+        start_year <- "yo"
+      }
+      if (is_empty(end_year) == TRUE) {
+        end_year <- "yo"
+      }
+      if (is_empty(job) == TRUE) {
+        job <- "yo"
+      }
+      if (is_empty(role) == TRUE) {
+        role <- "yo"
+      }
+      overlap<-seq(start_year,end_year,1)%>%intersect(seq(1988,1998,1))%>%length()
+      record <- c(work_2014$id[i],
+                  work_2014$hhid[i],
+                  job,
+                  role,
+                  start_year,
+                  end_year,
+                  overlap)
+      seq_full <- rbind(seq_full,
+                        record)
+    }
+  }
+  work <- rbind(work, seq_full)
+}
+work <- work %>% as.data.frame()
+names(work)<-c("id",
+               "hhid",
+               "job",
+               "role",
+               "start_year",
+               "end_year",
+               "overlap")
+```
+
+```{r}
+work_new <- NULL
+for (i in work$id %>% unique()) {
+  dta <- work %>% filter(id == i)
+  retire_year<- dta$end_year%>%sort(decreasing = TRUE)
+  retire_year<-retire_year[1]%>%as.character()%>%as.numeric()
+  dta$overlap_retire<-NA
+  for (i in 1:nrow(dta)){
+    dta$overlap_retire[i]<-(seq(dta$start_year[i]%>%as.character()%>%as.numeric(),
+                               dta$end_year[i]%>%as.character()%>%as.numeric(),
+                               1)%>%intersect(seq(retire_year-10,retire_year,1)))%>%length()
+  }
+  record <- dta[order(dta$overlap_retire, decreasing = TRUE), ]
+  if (record$overlap_retire[1] == 0) {
+    record <-
+      dta[order((1988 - dta$end_year %>% as.character() %>% as.numeric()),
+                decreasing = TRUE), ]
+  }
+  record <- record[1, ]
+  work_new <- rbind(work_new, record)
+}
+
+work_new<-work_new%>%mutate(job=job%>%as.character(),
+                            role=role%>%as.character(),
+                            job_detail=job%>%as.character(),
+                            role_detail=role%>%as.character())
+
+work_new$job[work_new$job %in% c(
+  "1 Government"
+)] <- "5 Government"
+
+work_new$job[work_new$job %in% c(
+  "2 Public Institution",
+  "6 Army"
+)] <- "4 Public institution"
+
+work_new$job[work_new$job %in% c(
+  "1 State Controlled Firm"
+)] <- "3 State Controlled Firm"
+
+work_new$job[work_new$job %in% c(
+  "4 Non-agricultural self-employment",
+  "3 Non-agricultural Employment",
+        "5 Unpaid Household Business Help",
+        "3 NGO",
+        "5 Individual Firm",
+        "7 Individual Household",
+        "9 Other",
+        "3 Private Controlled Firm",
+        "4 Hongkong/Macao/Taiwan Controlled Firm",
+        "5 Foreign Controlled Firm",
+        "2 Collective Controlled Firm",
+        "6 Other"
+)] <- "2 Private"
+
+work_new$job[work_new$job %in% c(
+  "1 Own Agricultural Production and Business",
+  "2 Agricultural Employment",
+  "6 Farmer",
+  "8 Rural Collective Economic Organization"
+)] <- "1 Agricultural"
+
+work_new$role[work_new$role %in% c("1 Worker")] <- "1 Worker"
+
+work_new$role[work_new$role %in% c("2 Team Leader",
+                                   "3 Section Chief",
+                                   "6 Village Leader",
+                                   "7 Township Leader",
+                                   "8 Division Manager")] <- "2 low rank cadre"
+
+work_new$role[work_new$role %in% c("4 Director of Division",
+                                   "5 Director-general of a bureau or Above",
+                                   "9 General Manager")] <- "3 high rank cadre"
+
+work_new$role[work_new$role %in% c("10 Other")] <- "missing"
+
+work_new$role[is.na(work_new$role) == TRUE] <- "missing"
+
+work_2014<-work_new%>%select(id,
+                             job,
+                             job_detail,
+                             rank=role,
+                             rank_detail=role_detail)
+save(work_2014, file = "output/work_2014.RData")
+retire_year<-work_new%>%select(id,start_year,end_year)
+save(retire_year, file = "output/retire_year.RData")
+```
+
+```{r}
+load("output/work_2014.RData")
+```
+
+```{r ind income}
+ind_income_raw_2015 <- read.dta13("CHARLS2015/Individual_Income.dta")
+ind_income_2015 <- ind_income_raw_2015 %>% select(
+  id = ID,
+  #Asset
+  hhid = householdID,
+  hc001,
+  #cash on hand
+  hc002_bracket_max:hc002_bracket_min,
+  hc005,
+  #Bank deposit,
+  hc006_bracket_max,
+  hc006_bracket_min,
+  hc008,
+  #gov bond,
+  hc009_bracket_max,
+  hc009_bracket_min,
+  hc013,
+  #stock
+  hc014_bracket_max,
+  hc014_bracket_min,
+  hc018,
+  #funds
+  hc019_bracket_max,
+  hc019_bracket_min,
+  hc028,
+  #HPF
+  hc029_bracket_max,
+  hc029_bracket_min,
+  hc031,
+  #work unit funding
+  hc032_bracket_max,
+  hc032_bracket_min,
+  hc034,
+  #unpaid salary
+  hc035_bracket_max,
+  hc035_bracket_min,
+  #Debt
+  hc040_w3,
+  #debt collectable
+  hc041_w3_bracket_max,
+  hc041_w3_bracket_min,
+  hd001,
+  #unpaid private debt
+  hd002_bracket_max,
+  hd002_bracket_min,
+  hc037,
+  #payable private debt,
+  hc038_w3_bracket_max,
+  hc038_w3_bracket_min,
+  hd003,
+  #credit card payable
+  hd004_bracket_max,
+  hd004_bracket_min,
+  hd004_w3,
+  #other debt payable
+  hd004_w3_1_bracket_max,
+  hd004_w3_1_bracket_min
+)
+```
+
+```{r}
+ind_income_2015[is.na(ind_income_2015)] <- 0
+ind_income_2015[ind_income_2015 < 0] <- 0
+ind_income_2015 <-
+  ind_income_2015 %>% mutate(
+    asset_fin = (hc001 * 2 + hc002_bracket_max + hc002_bracket_min) / 2 +
+      (hc005 * 2 + hc006_bracket_max + hc006_bracket_min) /
+      2 +
+      (hc008 * 2 + hc009_bracket_max + hc009_bracket_min) /
+      2 +
+      (hc013 * 2 + hc014_bracket_max + hc014_bracket_min) /
+      2 +
+      (hc018 * 2 + hc019_bracket_max + hc019_bracket_min) /
+      2 +
+      (hc028 * 2 + hc029_bracket_max + hc029_bracket_min) /
+      2 +
+      (hc031 * 2 + hc032_bracket_max + hc032_bracket_min) /
+      2 +
+      (hc034 * 2 + hc035_bracket_max + hc035_bracket_min) /
+      2 +
+      (hc040_w3 * 2 + hc041_w3_bracket_max + hc041_w3_bracket_min) /
+      2,
+    debt_fin =
+      (hd001 * 2 + hd002_bracket_max + hd002_bracket_min) /
+      2 +
+      (hc037 * 2 + hc038_w3_bracket_max + hc038_w3_bracket_min) /
+      2 +
+      (hd003 * 2 + hd004_bracket_max + hd004_bracket_min) /
+      2 +
+      (hd004_w3 * 2 + hd004_w3_1_bracket_max + hd004_w3_1_bracket_min) /
+      2
+  )
+ind_income_2015 <-
+  ind_income_2015 %>% mutate(net_fin = asset_fin - debt_fin)
+ind_income_2015 <- ind_income_2015 %>% select(id,
+                                              hhid,
+                                              net_fin)
+hh_fin_networth <-
+  ind_income_2015 %>% group_by(hhid) %>% summarise(asset_fin = sum(net_fin, na.rm =
+                                                                     TRUE))
+```
+
+
+```{r current home value}
+hh_income_raw_2015 <- read.dta13("CHARLS2015/Household_Income.dta")
+hh_income_2015 <- hh_income_raw_2015 %>% select(
+  hhid = householdID,
+  homeownership = ha007,
+  rent = ha005,
+  homevalueunit = ha011,
+  homevalue = ha011_1,
+  homevalue2 = ha011_2,
+  bracketlow = ha012_bracket_min,
+  brackethigh = ha012_bracket_max,
+  samehouse = ha000_w2_1,
+  ha065_1_1_:ha065_1_19_,
+  #durables
+  ha066_1_1_:ha066_1_6_,
+  #fixed asset for agriculture
+  ha067,
+  #fixed asset for business
+  ha068_1,
+  #other fixed asset
+)
+```
+
+```{r}
+hh_asset_2015 <- hh_income_raw_2015 %>% select(
+  hhid = householdID,
+  ha057_1_:ha057_4_,
+  #lands
+  ha065_1_1_:ha065_1_19_,
+  #durables
+  ha066_1_1_:ha066_1_6_,
+  #fixed asset for agriculture
+  ha067,
+  #fixed asset for business
+  ha068_1#other fixed asset
+)
+hh_asset_2015[is.na(hh_asset_2015)] <- 0
+hh_asset_2015[hh_asset_2015 < 0] <- 0
+hh_asset_2015 <- hh_asset_2015 %>% mutate(
+  asset_land = (ha057_1_ +
+                  ha057_1_ +
+                  ha057_2_ +
+                  ha057_3_ +
+                  ha057_4_) * 20,
+  asset_durable_fixed = ha065_1_1_ +
+    ha065_1_2_ +
+    ha065_1_3_ +
+    ha065_1_4_ +
+    ha065_1_5_ +
+    ha065_1_6_ +
+    ha065_1_7_ +
+    ha065_1_8_ +
+    ha065_1_9_ +
+    ha065_1_10_ +
+    ha065_1_11_ +
+    ha065_1_12_ +
+    ha065_1_13_ +
+    ha065_1_14_ +
+    ha065_1_15_ +
+    ha065_1_16_ +
+    ha065_1_17_ +
+    ha065_1_18_ +
+    ha065_1_19_ +
+    ha066_1_1_ +
+    ha066_1_2_ +
+    ha066_1_3_ +
+    ha066_1_4_ +
+    ha066_1_5_ +
+    ha066_1_6_ +
+    ha067 +
+    ha068_1
+)
+hh_asset_2015 <-
+  hh_asset_2015 %>% mutate(asset = asset_land + asset_durable_fixed)
+hh_asset_2015 <- hh_asset_2015 %>% select(hhid,
+                                          asset_land,
+                                          asset_durable_fixed,
+                                          asset)
+```
+
+```{r networth}
+networth_2015 <- full_join(hh_asset_2015, hh_fin_networth, by = "hhid")
+networth_2015 <- networth_2015 %>% mutate(hhid = hhid %>% as.character(),
+                                          net_worth = asset + asset_fin)
+```
+ 
+```{r home characteristics 2013}
+hh_income_raw_2013 <- read.dta13("CHARLS2013/Household_Income.dta")
+hh_income_2013 <- hh_income_raw_2013 %>% select(
+  hhid = householdID,
+  buildarea = ha001_w2,
+  obtainway = ha016,
+  obtainyear = ha017,
+  obtaincost = ha018
+)
+hh_income_2015 <- left_join(hh_income_2015,
+                            hh_income_2013,
+                            by = "hhid")
+```
+
+```{r home characteristics}
+hh_house_raw_2015 <-
+  read.dta13("CHARLS2015/Housing_Characteristics.dta")
+hh_house_2015 <- hh_house_raw_2015 %>% select(
+  hhid = householdID,
+  buildyear = i005,
+  buildyear_range = i005_1,
+  bedrooms = i012_1
+)
+house_2015 <- full_join(hh_income_2015,
+                        hh_house_2015,
+                        by = "hhid")
+```
+
+```{r create home value}
+for (i in 1:nrow(house_2015)) {
+  if (is.na(house_2015$samehouse[i]) == FALSE &
+      house_2015$samehouse[i] == "2 No") {
+    house_2015$buildarea[i] <- NA
+    house_2015$obtainway[i] <- NA
+    house_2015$obtainyear[i] <- NA
+    house_2015$obtaincost[i] <- NA
+  }
+  if (is.na(house_2015$homevalue[i]) == FALSE &
+      house_2015$homevalue[i] >= 1000) {
+    house_2015$homevalue[i] <- house_2015$homevalue[i] / 10000
+  }
+  if (is.na(house_2015$homevalue2[i]) == FALSE &
+      house_2015$homevalue2[i] > 1000) {
+    house_2015$homevalue[i] <- house_2015$homevalue[i] / 1000
+  }
+  if (is.na(house_2015$homevalue[i]) == TRUE &
+      house_2015$homevalueunit[i] == "2 Unit Price (1000 Yuan/M2)" &
+      is.na(house_2015$buildarea[i]) == FALSE &
+      is.na(house_2015$homevalue2[i]) == FALSE) {
+    if (house_2015$homevalue2[i] >= 500) {
+      house_2015$homevalue2[i] <- house_2015$homevalue2[i] / 1000
+    }
+    house_2015$homevalue[i] <-
+      house_2015$buildarea[i] * house_2015$homevalue2[i] / 10
+  }
+  if (is.na(house_2015$homevalue[i]) == TRUE &
+      is.na(house_2015$bracketlow[i]) == FALSE &
+      is.na(house_2015$brackethigh[i]) == FALSE) {
+    house_2015$homevalue[i] <-
+      (house_2015$bracketlow[i] + house_2015$brackethigh[i]) / (2 * 10000)
+  } else if (is.na(house_2015$homevalue[i]) == TRUE &
+             is.na(house_2015$bracketlow[i]) == FALSE) {
+    house_2015$homevalue[i] <- house_2015$bracketlow[i] / 10000
+  } else if (is.na(house_2015$homevalue[i]) == TRUE &
+             is.na(house_2015$brackethigh[i]) == FALSE) {
+    house_2015$homevalue[i] <- house_2015$brackethigh[i] / 10000
+  }
+}
+house_2015 <- house_2015 %>% select(hhid,
+                                    homeownership,
+                                    homevalue,
+                                    obtainway,
+                                    obtainyear,
+                                    obtaincost)
+
+for (i in 1:nrow(house_2015)) {
+  if (is.na(house_2015$obtaincost[i]) == FALSE &
+      house_2015$obtaincost[i] >= 500) {
+    house_2015$obtaincost[i] <- house_2015$obtaincost[i] / 10000
+  }
+}
+house_2015$obtainway <- house_2015$obtainway %>% as.character()
+house_2015$obtainway[house_2015$obtainway == "1 Market"] <- "Market"
+house_2015$obtainway[house_2015$obtainway == "2 Working Unit of Household Member"] <-
+  "Working unit"
+house_2015$obtainway[house_2015$obtainway == "6 Self-built"] <-
+  "Self-built"
+house_2015$obtainway[house_2015$obtainway == "8 Compensation for Old Home"] <-
+  "Compensation for Old Home"
+house_2015$obtainway[house_2015$obtainway %in% c(
+  "3 Child Non-household Member",
+  "4 Parents Non-household Member",
+  "5 Other Relatives",
+  "7 Inherited or Given",
+  "9 Other"
+)] <- "Other"
+house_2015$homevalue[house_2015$homeownership == "3 None of Household Member"] <-
+  0
+house_2015 <- house_2015 %>% mutate(hhid = hhid %>% as.character()
+)
+```
+
+```{r Merge all 2014}
+ind_2014 <- full_join(hukou_2014, party_2014, by = "id")
+ind_2014 <- full_join(ind_2014, education_2014, by = "id")
+ind_2014 <- full_join(ind_2014, work_2014, by = "id")
+```
+
+```{r Merge 2014 and 2015}
+ind_2015 <- demographic_2015 %>% select(-address0,-otheraddress,-address1,-birthyear,)
+dta_ind <- full_join(ind_2014, ind_2015, by = "id")
+dta_hh <- full_join(dta_ind, house_2015, by = "hhid")
+dta_hh <- full_join(dta_hh, networth_2015, by = "hhid")
+dta_hh <-
+  dta_hh %>% mutate(net_worth_real = (net_worth + homevalue * 10000) / 10000)
+```
+
+###Child
+```{r}
+psu_raw <- read.dta13("CHARLS2013/PSU.dta",
+                      fromEncoding = "GB2312",
+                      convert.factors = FALSE)
+psu_raw$city[psu_raw$city=="北京"]<-"北京市"
+psu_raw$city[psu_raw$city=="哈尔滨"]<-"哈尔滨市"
+psu_raw$city[psu_raw$city=="天津市"]<-"天津市"
+psu_raw$tier <- NA
+psu_raw$tier[psu_raw$city %in% c(
+  "上海市",
+  "北京市",
+  "广州市",
+  "深圳市",
+  "重庆市",
+  "天津市",
+  "苏州市",
+  "成都市",
+  "武汉市",
+  "杭州市",
+  "南京市",
+  "西安市",
+  "长沙市",
+  "沈阳市",
+  "青岛市",
+  "郑州市",
+  "大连市",
+  "东莞市",
+  "宁波市"
+)] <- "tier1"
+psu_raw$tier[psu_raw$city %in% c(
+  "厦门市",
+  "福州市",
+  "无锡市",
+  "合肥市",
+  "昆明市",
+  "哈尔滨市",
+  "济南市",
+  "佛山市",
+  "长春市",
+  "温州市",
+  "石家庄市",
+  "南宁市",
+  "常州市",
+  "泉州市",
+  "南昌市",
+  "贵阳市",
+  "太原市",
+  "烟台市",
+  "嘉兴市",
+  "南通市",
+  "金华市",
+  "珠海市",
+  "惠州市",
+  "徐州市",
+  "海口市",
+  "乌鲁木齐市",
+  "绍兴市",
+  "中山市",
+  "台州市",
+  "兰州市"
+)] <- "tier2"
+psu_raw$tier[psu_raw$city %in% c(
+  "潍坊市",
+  "保定市",
+  "镇江市",
+  "扬州市",
+  "桂林市",
+  "唐山市",
+  "三亚市",
+  "湖州市",
+  "呼和浩特市",
+  "廊坊市",
+  "洛阳市",
+  "威海市",
+  "盐城市",
+  "临沂市",
+  "江门市",
+  "汕头市",
+  "泰州市",
+  "漳州市",
+  "邯郸市",
+  "济宁市",
+  "芜湖市",
+  "淄博市",
+  "银川市",
+  "柳州市",
+  "绵阳市",
+  "湛江市",
+  "鞍山市",
+  "赣州市",
+  "大庆市",
+  "宜昌市",
+  "包头市",
+  "咸阳市",
+  "秦皇岛市",
+  "株洲市",
+  "莆田市",
+  "吉林市",
+  "淮安市",
+  "肇庆市",
+  "宁德市",
+  "衡阳市",
+  "南平市",
+  "连云港市",
+  "丹东市",
+  "丽江市",
+  "揭阳市",
+  "延边朝鲜族自治州",
+  "舟山市",
+  "九江市",
+  "龙岩市",
+  "沧州市",
+  "抚顺市",
+  "襄阳市",
+  "上饶市",
+  "营口市",
+  "三明市",
+  "蚌埠市",
+  "丽水市",
+  "岳阳市",
+  "清远市",
+  "荆州市",
+  "泰安市",
+  "衢州市",
+  "盘锦市",
+  "东营市",
+  "南阳市",
+  "马鞍山市",
+  "南充市",
+  "西宁市",
+  "孝感市",
+  "齐齐哈尔市"
+)] <- "tier3"
+psu_raw$tier[is.na(psu_raw$tier) == TRUE] <- "tier4"
+```
+
+```{r}
+houseprice <- read.dta13("CHARLS2013/price.dta",
+                      fromEncoding = "GB2312",
+                      convert.factors = FALSE)
+houseprice <- houseprice%>%mutate(price=price/10000)
+psu_raw<-left_join(psu_raw,
+                   houseprice,
+                   by="city")
+
+psu_raw$price[is.na(psu_raw$price)==TRUE]<-0.3
+psu <- psu_raw %>% dplyr::select(cid = communityID,
+                          province,
+                          city,
+                          tier,
+                          price)
+```
+
+```{r import child data, echo=FALSE, warning=FALSE}
+child_raw_2015 <- read.dta13("CHARLS2015/Child.dta")
+#Child data
+child_2015 <- child_raw_2015 %>% select(
+  id = ID,
+  hhid = householdID,
+  cid = communityID,
+  childid = childID,
+  gender = gender,
+  age = age,
+  independence = cb053,
+  distance = cb053_2,
+  education = cb052_w3,
+  hukou = cb055,
+  hukou_prior= cb055_w2_1,
+  hukou_place = cb057,
+  marriage = cb063,
+  party = cb063_w3_2,
+  numchildren = cb065,
+  income = cb069,
+  home = cb071_w3,
+  homevalue = cb072_w3,
+  urban = cb054
+) %>% left_join(psu, by = "cid")
+```
+
+```{r child gender}
+child_2015$gender <-
+  child_2015$gender %>% as.numeric() %>% factor(levels = c(2, 1),
+                                                labels = c("Female",
+                                                           "Male"))
+```
+
+```{r Marriage status}
+child_2015$marriage <- child_2015$marriage %>% as.character()
+child_2015$marriage[child_2015$marriage == "1 Married With Spouse At Present" |
+                      child_2015$marriage == "2 Married But Not Living With Spouse Temporarily" |
+                      child_2015$marriage == "3 Separated" |
+                      child_2015$marriage == "4 Divorced" |
+                      child_2015$marriage == "5 Widowed"] <- 2
+child_2015$marriage[child_2015$marriage == "6 Never Married" |
+                      child_2015$marriage == "7 Cohabitated"] <- 1
+child_2015$marriage <- child_2015$marriage %>% factor(levels = c(1, 2),
+                                                      labels = c("Not married",
+                                                                 "Married"))
+```
+
+```{r}
+child_2015$party <-
+  child_2015$party %>% as.numeric %>% factor(levels = c(2, 1),
+                                             labels = c("Not Party member",
+                                                        "Party member"))
+```
+
+```{r Hukou}
+child_2015$hukou <- child_2015$hukou %>% as.character()
+child_2015$hukou_prior <- child_2015$hukou_prior %>% as.character()
+child_2015$hukou[child_2015$hukou == "3 Unified Residency Hukou"&child_2015$hukou_prior=="1 Agricultural Hukou"] <- "1 Agricultural Hukou"
+child_2015$hukou[child_2015$hukou == "3 Unified Residency Hukou"&child_2015$hukou_prior=="2 Non-Agricultural Hukou"] <- "2 Non-Agricultural Hukou"
+child_2015$hukou[child_2015$hukou == "3 Unified Residency Hukou"] <- "1 Agricultural Hukou"
+child_2015$hukou[child_2015$hukou == "4 Does Not Have Hukou"] <- NA
+```
+
+```{r Urban status}
+address <- demographic_2015 %>% select(hhid,
+                                       role,
+                                       address)
+child_2015$address_parent <- NA
+for (i in 1:nrow(child_2015)) {
+  hhidi <- child_2015$hhid[i]
+  addresses <- address %>% filter(hhid == hhidi)
+  if (addresses$address[addresses$role == "1 male"] %>% length > 0) {
+    child_2015$address_parent[i] <-
+      addresses$address[addresses$role == "1 male"][1]
+  } else{
+    if (addresses$address[addresses$role == "2 female"] %>% length > 0)
+      child_2015$address_parent[i] <-
+        addresses$address[addresses$role == "2 female"][1]
+  }
+}
+```
+
+```{r urban status continue}
+child_2015$urban <- child_2015$urban %>% as.character()
+for (i in 1:nrow(child_2015)) {
+  if (child_2015$independence[i] %in% c(
+    "1 This Household, And Economicly Dependent",
+    "2 This Household, But Economicly Independent",
+    "3 The Same Or Adjacent Dwelling/Courtyard With You"
+  )) {
+    child_2015$urban[i] <- child_2015$address_parent[i]
+  }
+  if (child_2015$independence[i] %in% c(
+    "4 Another Household In Your Permanent Address's Village/Neighorhood",
+    "5 Another Village/Neighborhood In Your Permanent Address's County/City/District"
+  ) &
+  is.na(child_2015$urban[i]) == TRUE) {
+    child_2015$urban[i] <- child_2015$address_parent[i]
+  }
+}
+```
+
+```{r}
+child_2015$urban<-child_2015$urban%>%as.character()
+#child_2015$urban[child_2015$urban %in% c("1 Main City Zone")] <- 3
+child_2015$urban[child_2015$urban %in% c(
+  "2 Combination Zone Between Urban and Rural Areas",
+  "2 Combination Zone Between Urban And Rural Areas"
+)] <- "2 Combination Zone Between Urban And Rural Areas"
+#child_2015$urban[child_2015$urban %in% c("3 The Town Center",
+#                                         "4 ZhenXiang Area",
+#                                         "5 Special Area",
+#                                         "6 Township Central",
+#                                         "7 Village")] <- 1
+child_2015$urban[child_2015$urban %in% c("unknown")] <- NA
+#child_2015$urban <- child_2015$urban %>% factor(
+#  levels = c(1:3),
+#  labels = c(
+#    "1 other",
+#    "2 Combination Zone Between Urban And Rural Areas",
+#    "3 Main City Zone"
+#  )
+#)
+```
+
+```{r Education}
+child_2015$education <- child_2015$education %>% as.character()
+child_2015$education_years <- NA
+child_2015$education_years[child_2015$education == "1 No formal education illiterate"] <-
+  0
+child_2015$education_years[child_2015$education == "2 Did not finish primary school but capable of reading or writing" |
+                             child_2015$education == "3 Sishu/home school"] <-
+  3
+child_2015$education_years[child_2015$education == "4 Elementary school"] <-
+  6
+child_2015$education_years[child_2015$education == "5 Middle school"] <-
+  9
+child_2015$education_years[child_2015$education == "6 High school"] <-
+  12
+child_2015$education_years[child_2015$education == "7 Vocational school"] <-
+  11
+child_2015$education_years[child_2015$education == "8 Two-/Three-Year College / Associate degree"] <-
+  14
+child_2015$education_years[child_2015$education == "9 Four-Year College / Bachelors degree"] <-
+  16
+child_2015$education_years[child_2015$education == "10 Post-graduate, Masters degree"] <-
+  19
+child_2015$education_years[child_2015$education == "11 Post-graduate, doctoral degree/Ph.D."] <-
+  22
+```
+
+```{r}
+child_2015$education[child_2015$education == "1 No formal education illiterate" |
+                       child_2015$education == "2 Did not finish primary school but capable of reading or writing" |
+                       child_2015$education == "3 Sishu/home school" |
+                       child_2015$education == "4 Elementary school"] <- 1
+child_2015$education[child_2015$education == "5 Middle school"] <- 2
+child_2015$education[child_2015$education == "6 High school"|
+                       child_2015$education == "7 Vocational school"] <-
+  3
+child_2015$education[child_2015$education == "8 Two-/Three-Year College / Associate degree"|
+                       child_2015$education == "9 Four-Year College / Bachelors degree" |
+                       child_2015$education == "10 Post-graduate, Masters degree" |
+                       child_2015$education == "11 Post-graduate, doctoral degree/Ph.D."] <-
+  4
+child_2015$education <- child_2015$education %>% factor(
+  levels = c(1:4),
+  labels = c(
+    "1 Primary school and below",
+    "2 Middle school",
+    "3 High/vocational school",
+    "4 College and above"
+  )
+)
+```
+
+
+```{r Income, echo=TRUE, warning=FALSE}
+child_2015$income <-
+  child_2015$income %>% as.character() %>% str_extract("^[:digit:]+ ") %>% as.numeric() %>% factor(
+    levels = (1:12),
+    labels = c(
+      "0",
+      "1000",
+      "2500",
+      "7500",
+      "15000",
+      "25000",
+      "40000",
+      "75000",
+      "125000",
+      "175000",
+      "250000",
+      "500000"
+    )
+  )%>%as.character()%>%as.numeric()
+```
+
+```{r}
+child_2014_raw <- demographic_raw_2014 %>% select(hhid = householdID,
+                                                  c036_1_:c036_18_,
+                                                  c037a1_1_:c037a1_18_)
+child_2014<-NULL
+for (i in 1:nrow(demographic_raw_2014)){
+  for (j in 1:18){
+    if (is.na(child_2014_raw[[paste("c036_",j,"_",sep = "")]][i])==FALSE){
+    householdid<-child_2014_raw$hhid[i]
+    record<-c(child_2014_raw$hhid[i]%>%as.character(),
+              j,
+              child_2014_raw[[paste("c036_",j,"_",sep = "")]][i]%>%as.numeric(),
+              child_2014_raw[[paste("c037a1_",j,"_",sep = "")]][i]%>%as.character()
+              )
+    child_2014<-rbind(child_2014,record)
+    }
+  }
+} 
+child_2014<-child_2014%>%as.data.frame()
+child_2014$education_years_spouse <- NA
+child_2014$education_years_spouse[child_2014$V3 %in%c(1)] <- 0
+child_2014$education_years_spouse[child_2014$V3 %in%c(2,3)] <-
+  3
+child_2014$education_years_spouse[child_2014$V3 %in%c(4)] <-
+  6
+child_2014$education_years_spouse[child_2014$V3 %in%c(5)] <-
+  9
+child_2014$education_years_spouse[child_2014$V3 %in%c(6)] <-
+  12
+child_2014$education_years_spouse[child_2014$V3 %in%c(7)] <-
+  11
+child_2014$education_years_spouse[child_2014$V3 %in%c(8)] <-
+  14
+child_2014$education_years_spouse[child_2014$V3 %in%c(9)] <-
+  16
+child_2014$education_years_spouse[child_2014$V3 %in%c(10)] <-
+  19
+child_2014$education_years_spouse[child_2014$V3 %in%c(11)] <-
+  22
+
+child_2014$V4[child_2014$V4=="3 Unified Residence Hukou"]<-"1 Agricultural Hukou"
+child_2014$V1<-child_2014$V1%>%as.character()
+child_2014$V2<-child_2014$V2%>%as.character()%>%as.integer()
+child_2014$V4<-child_2014$V4%>%as.character()
+
+child_2014<-child_2014%>%as.data.frame()%>%select(hhid=V1,
+                                                  childid=V2,
+                                                  education_years_spouse,
+                                                  hukou_spouse=V4)
+child_2015 <- right_join(child_2014,
+                         child_2015,
+                         by = c("hhid", "childid"))
+```
+
+```{r Occupation}
+child_raw_2013 <- read.dta13("CHARLS2013/Child.dta")
+child_2013 <- child_raw_2013 %>% select(hhid = householdID,
+                                        childid = childID,
+                                        jobcat = cb071)
+child_2013$jobcat <- child_2013$jobcat %>% as.character()
+child_2013$jobcat[child_2013$jobcat == "5 Agricultural, Forestry, Husbandry and Fishery Producer"] <-
+  1
+child_2013$jobcat[child_2013$jobcat == "6 Production and Transportation worker"] <-
+  2
+child_2013$jobcat[child_2013$jobcat == "4 Commerical and Service worker"] <-
+  3
+child_2013$jobcat[child_2013$jobcat == "3 Clerk"] <- 4
+child_2013$jobcat[child_2013$jobcat == "2 Professional and Technician"] <-
+  5
+child_2013$jobcat[child_2013$jobcat == "1 Manager"] <- 6
+child_2013$jobcat <- child_2013$jobcat %>% factor(
+  levels = c(1:6),
+  labels = c(
+    "1 Peasants",
+    "2 Industrial workers",
+    "3 Employees of services",
+    "4 Clerical personnel",
+    "5 Professionals and Technicians",
+    "6 State, social and enterprise managers"
+  )
+)
+child_2013$childid <- child_2013$childid %>% as.integer()
+child_2015 <- right_join(child_2013,
+                         child_2015,
+                         by = c("hhid", "childid"))
+```
+
+```{r}
+child_2015$homevalue[child_2015$home == "2 No"] <- 0
+child_2015$homevalue[child_2015$homevalue < 0] <- NA
+child_2015$homevalue[child_2015$homevalue > 1000] <- 1000
+```
+
+```{r}
+transfer_raw_2015 <- read.dta13("CHARLS2015/Family_Transfer.dta")
+transfer_2015 <- transfer_raw_2015 %>% select(
+  hhid = householdID,
+  ce029_1_1_:ce029_1_16_,
+  #money support
+  ce069_w2_1_1_:ce069_w2_1_15_,
+  ce070_w2_1_1_:ce070_w2_1_9_
+)#buy marriage house
+transfer_2015$ce069_w2_1_16_ <- "2"
+```
+
+```{r}
+transfer_raw_2013 <- read.dta13("CHARLS2013/Family_Transfer.dta")
+transfer_2013 <- transfer_raw_2013 %>% select(hhid = householdID,
+                                              ce031_1_1_:ce031_1_11_)#money support
+```
+
+```{r}
+child_2015$gift <- NA
+child_2015$transfer <- NA
+child_2015$marriagehome <- NA
+child_2015$marriagehomevalue <- NA
+for (i in 1:nrow(child_2015)) {
+  household <- child_2015$hhid[i]
+  if (household %in% transfer_2015$hhid) {
+    record <- transfer_2015 %>% filter(hhid == household)
+    #marriage home
+    child_2015$marriagehome[i] <- record[[paste("ce069_w2_1_",
+                                                child_2015$childid[i],
+                                                "_",
+                                                sep = "")]]
+    if (child_2015$childid[i] <= 9) {
+      child_2015$marriagehomevalue[i] <- record[[paste("ce070_w2_1_",
+                                                       child_2015$childid[i],
+                                                       "_",
+                                                       sep = "")]]
+    }
+    #Gift transfer
+    child_2015$gift[i] <- record[[paste("ce029_1_",
+                                        child_2015$childid[i],
+                                        "_",
+                                        sep = "")]]
+    if (household %in% transfer_2013$hhid & child_2015$childid[i] <= 11) {
+      record_2013 <- transfer_2013 %>% filter(hhid == household)
+      if (is.null(record_2013[[paste("ce031_1_",
+                                     child_2015$childid[i],
+                                     sep = "")]]) == FALSE) {
+        gift_2013[is.na(gift_2013) == TRUE] <- 0
+        child_2015$gift[i] <- child_2015$gift[i] + gift_2013
+      }
+    }
+  }
+}
+child_2015$gift[child_2015$gift < 0] <- 0
+child_2015$gift[is.na(child_2015$gift) == TRUE] <- 0
+child_2015$marriagehome[is.na(child_2015$marriagehome) == TRUE] <-
+  "No marriage home"
+child_2015$marriagehome[child_2015$marriagehome == 2] <-
+  "No marriage home"
+child_2015$marriagehome[child_2015$marriagehome == 1] <-
+  "Parent buy marriage home"
+for (i in 1:nrow(child_2015)) {
+  if (is.na(child_2015$marriagehomevalue[i]) == FALSE &
+      child_2015$marriagehomevalue[i] >= 1000) {
+    child_2015$marriagehomevalue[i] <-
+      child_2015$marriagehomevalue[i] / 1000
+  }
+  if (is.na(child_2015$marriagehomevalue[i]) == TRUE &
+      child_2015$marriagehome[i] == "Parent buy marriage home") {
+    child_2015$marriagehomevalue[i] <-
+      child_2015$marriagehomevalue %>% median(na.rm = TRUE)
+  }
+}
+child_2015$marriagehomevalue[is.na(child_2015$marriagehomevalue)] <- 0
+```
+
+```{r Final processing, echo=FALSE, warning=FALSE}
+child <- child_2015 %>% select(-distance,-address_parent)
+#Add prefix of "child_" to all vars
+names(child)[!names(child) %in% c("childid",
+                                  "hhid",
+                                  "cid")] <-
+  names(child)[!names(child) %in% c("childid",
+                                    "hhid",
+                                    "cid")] %>% str_c("child", sep = "_")
+```
+
+```{r Only keep householder in parent family}
+householder <- NULL
+for (i in dta_hh$hhid %>%as.character()%>% unique()) {
+  dta <- dta_hh %>% filter(hhid == i)
+  dta <- dta[order(dta$role, decreasing = FALSE), ]
+  record <- dta[1, ]
+  householder <- householder %>% rbind(record)
+}
+```
+
+### Merge parent and child data
+```{r Merge parent and child data}
+merged_charls <- inner_join(child, householder, by = c("hhid"))
+```
+
+```{r}
+merged_charls$onlychild <- NA
+for (i in 1:nrow(merged_charls)) {
+  dta <-
+    merged_charls %>% filter(merged_charls$hhid == merged_charls$hhid[i])
+  if (nrow(dta) == 1) {
+    merged_charls$onlychild[i] <- "only child"
+  }
+  if (nrow(dta) > 1 & merged_charls$childid[i] == 1) {
+    merged_charls$onlychild[i] <- "first child"
+  }
+  if (nrow(dta) > 1 & merged_charls$childid[i] > 1) {
+    merged_charls$onlychild[i] <- "later child"
+  }
+}
+```
+
+```{r}
+save(merged_charls, file = "output/merged_charls.RData")
+```
+
+

@@ -1,0 +1,564 @@
+---
+title: "CHARLS Modeling"
+author: "Langyi Tian"
+output: html_document
+---      
+###Setup
+```{r setup}
+rm(list = ls())#clear environment
+wd <- "C:/Users/Administrator/Documents/GitHub/parental-wealth-impact"#set working directory
+#Set up default knitr chunk options
+library("knitr")
+knitr::opts_chunk$set(
+  echo = TRUE,
+  eval = TRUE,
+  message = FALSE,
+  warning = FALSE,
+  fig.height = 9,
+  fig.width = 15,
+  fig.align = "center",
+  cache = TRUE,
+  cache.lazy = FALSE
+)
+options(htmltools.dir.version = FALSE)
+```  
+ 
+```{r packages, message = FALSE, warning = FALSE, echo=FALSE}
+# Load packages.
+packages <- c(
+  "knitr",
+  "tidyverse",
+  "finalfit",
+  "MissMech",
+  "mice",
+  "qwraps2",
+  "jtools"
+)
+packages <- lapply(
+  packages,
+  FUN = function(x) {
+    if (!require(x, character.only = TRUE)) {
+      install.packages(x)
+      library(x, character.only = TRUE)
+    }
+  }
+)
+select <- dplyr::select
+```
+
+```{r filter and select final data,echo=TRUE, warning=FALSE}
+load("output/merged.RData")
+```
+
+## Filter observations
+```{r}
+dta <-
+  merged 
+
+summary(dta)
+```
+
+```{r}
+dta %>% missing_glimpse ()  
+```
+
+
+### missing child info
+```{r}
+dta %>%
+  select(job_child,
+         income,
+         homevalue
+         ) %>%
+  md.pattern(plot = FALSE)
+```
+ 
+### missing child information
+```{r}
+#compare mean between missing and non missing
+dta %>%
+  filter(ownership == "1 Yes") %>%
+  group_by(is.na(homevalue)) %>%
+  summarise(mean(age_child),
+            mean(education_years_child, na.rm = TRUE))
+
+TestMCARNormality(dta %>%
+                    filter(ownership == "1 Yes") %>%
+                    select(homevalue, age_child))
+```
+
+```{r}
+dta_mutated <-
+  dta %>%
+  mutate(
+    asset_fin = pmax(asset_fin, 0),
+    asset_total = pmax(asset_total, 0),
+    income_logged = log(income + 50),
+    ownership = (ownership=="1 Yes")%>%as.numeric(),
+    marriagehome = (marriagehome %>%replace_na("2 No") == "1 Yes"),
+    job_child_manager = (job_child %>% replace_na("5 Agricultural, Forestry, Husbandry and Fishery Producer") == "1 Manager") 
+  ) %>%
+  mutate_at(
+    c(
+      "price",
+      "homevalue",
+      "asset_fin",
+      "asset_land",
+      "asset_durable_fixed",
+      "asset_home",
+      "asset_total"
+    ),
+    .funs = list(logged = ~ log(. + 1))
+  ) %>%
+  mutate_at(
+    c(
+      "homevalue",
+      "asset_fin",
+      "asset_land",
+      "asset_durable_fixed",
+      "asset_home",
+      "asset_total"
+    ),
+    .funs = list(flag = ~ ifelse(. == 0,
+                                 1,
+                                 0))
+  )
+dta_mutated
+```
+
+```{r}
+options(qwraps2_markup = "markdown")
+summary_table(dta_mutated)
+```
+
+```{r}
+dta_mutated%>%
+  group_by(is.na(sex_child))%>%
+  summarise(mean(siblings,na.rm = TRUE))
+```
+
+```{r}
+dta_mutated_filtered <-
+  dta_mutated%>% filter(
+    urban_child %in% c(
+      "1 Main City Zone",
+      "2 Combination Zone Between Urban and Rural Areas",
+      "3 The Town Center"
+    #  "4 ZhenXiang Area"
+    ),
+    !independence %in% c(
+      "1 This Household, And Economicly Dependent",
+      "2 This Household, But Economicly Independent"
+    ),
+    age_child > 18,
+    #age_child < 55,
+    marriage == "2 Married"
+  )
+library(VGAM)
+```
+
+## independence/not
+```{r}
+dta_independence <-
+  dta_mutated_filtered %>%
+  mutate(independence_dummny = ifelse(independence %in% c("6 Other"),
+                                      "other",
+                                      "close"),
+         job_parent = job_parent %>% fct_recode(`1 Private`="1 Agricultural",
+                                                `1 Private`="2 Private",
+                                                `2 Public`="3 State Controlled Firm",
+                                                `2 Public`="4 Public institution",
+                                                `2 Public`="5 Government"))
+summary_table(dta_independence%>%filter(independence_dummny=="close"))
+```
+
+
+```{r}
+summary_table(dta_independence%>%filter(independence_dummny=="other"))
+```
+
+```{r}
+string.x <-
+  paste(
+    #control
+    #"urban_child",
+    "price_logged",
+    
+    #child,
+    
+    "age_child",
+    "sex_child",
+    "numchildren",
+    "hukou_child",
+    "party_child",
+    "education_years_child",
+    "job_child_manager",
+    "income_logged",
+    
+    #spouse
+    
+    "education_years_spouse",
+    "hukou_spouse",
+    
+    #parent family
+    
+    #"urban_parent",
+    "siblings",
+    "sibling_rank",
+    "education_years_parent",
+    "job_parent",
+    #"hukou_parent",
+    "party_parent",
+    #"asset_total_flag",
+    "asset_total_logged",
+    sep = " + "
+  )
+formula.independence.marriagehome <-
+  formula(paste("marriagehome ~",
+                string.x))
+
+formula.independence.ownership <-
+  formula(paste("(ownership) ~",
+                string.x))
+
+formula.independence.homevalue <-
+  formula(paste("homevalue_logged ~",
+                string.x))
+```
+
+```{r}
+export_summs(
+  glm(
+    formula.independence.marriagehome,
+    data = dta_independence %>%
+      filter(independence_dummny == "close"),
+    family = binomial
+  ),
+  glm(
+    formula.independence.marriagehome,
+    data = dta_independence %>%
+      filter(independence_dummny == "other"),
+    family = binomial
+  ),
+  error_pos = "same",
+  model.names = c("close", "other")
+)
+```
+
+```{r}
+export_summs(
+  glm(
+    formula.independence.ownership,
+    data = dta_independence %>%
+      filter(independence_dummny == "close"),
+    family = binomial
+  ),
+  glm(
+    formula.independence.ownership,
+    data = dta_independence %>%
+      filter(independence_dummny == "other"),
+    family = binomial
+  ),
+  error_pos = "same",
+  model.names = c("close", "other")
+)
+```
+
+
+```{r}
+vglm(formula.independence.homevalue,
+     tobit(Lower  = 1),
+     data = dta_independence %>%
+       filter(independence_dummny == "close")) %>%
+  summary()
+
+vglm(formula.independence.homevalue,
+     tobit(Lower  = 1),
+     data = dta_independence %>%
+       filter(independence_dummny == "other")) %>%
+  summary()
+```
+
+```{r}
+export_summs(
+  lm(
+    formula.independence.homevalue,
+    data = dta_independence %>%
+      filter(independence_dummny == "close",
+             ownership ==1)
+  ),
+  lm(
+    formula.independence.homevalue,
+    data = dta_independence %>%
+      filter(independence_dummny == "other",
+             ownership ==1)
+  ),
+  error_pos = "same",
+  model.names = c("close", "other")
+)
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+## unmarried
+```{r}
+formula.unmarried <-
+  formula(
+    homevalue_logged ~
+      #child
+      age_child +
+      siblings +
+      sibling_rank + 
+      hukou_child +
+      party_child + 
+      education_years_child +
+      #job_child +
+      income_logged + 
+      #control
+      #urban_child +
+      price_logged +
+      #parent
+      education_years_parent +
+      #job_parent + 
+      #asset_total_flag +
+      asset_total_logged
+  )
+
+export_summs(
+  lm(formula.unmarried,
+     data = dta_mutated_filtered %>%
+       filter(sex_child == "2 Female",
+              marriage == "1 Not married")),
+  lm(formula.unmarried,
+     data = dta_mutated_filtered %>%
+       filter(sex_child == "1 Male",
+              marriage == "1 Not married")),
+  error_pos = "same",
+  model.names = c("female","male")
+)
+```
+
+```{r,eval=FALSE}
+vglm(formula.unmarried,
+     tobit(Lower  = 1),
+     data = dta_mutated_filtered %>%
+       filter(sex_child == "2 Female",
+              marriage == "1 Not married")) %>%
+  summary()
+
+vglm(formula.unmarried,
+     tobit(Lower  = 1),
+     data = dta_mutated_filtered %>%
+       filter(sex_child == "1 Male",
+              marriage == "1 Not married")) %>%
+  summary()
+```
+
+```{r}
+formula.ownership.unmarried <-
+  formula(
+    ownership~
+      #child
+      age_child +
+      siblings +
+      sibling_rank + 
+      hukou_child +
+      party_child + 
+      education_years_child + 
+      #job_child +
+      income_logged + 
+      #control
+      #urban_child +
+      #price_logged +
+      #parent
+      education_years_parent +
+      #job_parent + 
+      hukou_parent +
+      party_parent +
+      asset_total_flag +
+      asset_total_logged
+  )
+
+export_summs(
+  glm(formula.ownership.unmarried,
+     data = dta_mutated_filtered %>%
+       filter(sex_child == "2 Female",
+              marriage == "1 Not married"),
+     family = binomial),
+  glm(formula.ownership.unmarried,
+     data = dta_mutated_filtered %>%
+       filter(sex_child == "1 Male",
+              marriage == "1 Not married"),
+     family = binomial),
+  error_pos = "same",
+  model.names = c("female","male")
+)
+```
+
+
+## married
+```{r}
+formula.married <-
+  formula(
+    homevalue_logged ~
+      #child
+      age_child +
+      siblings +
+      sibling_rank +
+      numchildren +
+      hukou_child +
+      #party_child + 
+      education_years_child +
+      #job_child +
+      income_logged +
+      #spouse
+      education_years_spouse +
+      hukou_spouse +
+      #control
+      #urban_child +
+      #price_logged +
+      #parent
+      #education_years_parent +
+      #job_parent + 
+      #asset_total_flag +
+      asset_total_logged
+  ) 
+
+export_summs(
+  lm(formula.married,
+     data = dta_mutated_filtered %>%
+       filter(sex_child == "2 Female",
+              marriage == "2 Married")),
+  lm(formula.married,
+     data = dta_mutated_filtered %>%
+       filter(sex_child == "1 Male",
+              marriage == "2 Married")),
+  error_pos = "same",
+  model.names = c("female","male")
+)
+```
+
+```{r,eval=FALSE}
+vglm(formula.married,
+     tobit(Lower  = 1),
+     data = dta_mutated_filtered %>%
+       filter(sex_child == "2 Female",
+              marriage == "2 Married")) %>%
+  summary()
+
+vglm(formula.married,
+     tobit(Lower  = 1),
+     data = dta_mutated_filtered %>%
+       filter(sex_child == "1 Male",
+              marriage == "2 Married")) %>%
+  summary()
+```
+
+## married vs unmarried
+```{r}
+formula.compare <-
+  formula(
+    homevalue_logged ~
+      #child
+      age_child +
+      siblings +
+      sibling_rank +
+      numchildren +
+      hukou_child +
+      marriage + 
+      party_child + 
+      education_years_child +
+      job_child +
+      income_logged +
+      #spouse
+      education_years_spouse +
+      hukou_spouse +
+      #control
+      #urban_child +
+      #price_logged +
+      #parent
+      education_years_parent +
+      #job_parent + 
+      asset_total_flag +
+      asset_total_logged
+  )
+```
+
+```{r}
+export_summs(
+  lm(formula.compare,
+     data = dta_mutated_filtered %>%
+       filter(sex_child == "2 Female")),
+  lm(formula.compare,
+     data = dta_mutated_filtered %>%
+       filter(sex_child == "1 Male")),
+  error_pos = "same",
+  model.names = c("female","male")
+)
+```
+
+```{r,eval=FALSE}
+vglm(formula.compare,
+     tobit(Lower  = 1),
+     data = dta_mutated_filtered %>%
+       filter(sex_child == "2 Female")) %>%
+  summary()
+
+vglm(formula.compare,
+     tobit(Lower  = 1),
+     data = dta_mutated_filtered %>%
+       filter(sex_child == "1 Male")) %>%
+  summary()
+```
+
+
+```{r}
+lm(
+homevalue_logged ~
+      #child
+      age_child +
+      siblings +
+      sibling_rank +
+      numchildren +
+      hukou_child +
+      #party_child + 
+      education_years_child +
+      #job_child +
+      income_logged +
+      #spouse
+      education_years_spouse +
+      hukou_spouse +
+      #control
+      #urban_child +
+      #price_logged +
+      #parent
+      education_years_parent +
+      job_parent + 
+      asset_total_flag +
+      asset_total_logged +
+  independence,
+data = dta_mutated_filtered
+)%>%summary()
+
+```
+
+

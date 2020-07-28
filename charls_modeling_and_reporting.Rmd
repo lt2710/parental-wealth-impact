@@ -15,9 +15,9 @@ knitr::opts_chunk$set(
   eval = TRUE,
   message = FALSE,
   warning = FALSE,
-  fig.height = 9,
-  fig.width = 15,
-  fig.align = "center",
+  # fig.height = 9,
+  # fig.width = 15,
+  # fig.align = "center", 
   cache = TRUE,
   cache.lazy = FALSE
 )
@@ -121,7 +121,7 @@ missing_table
 ```{r}
 dta_independence <-
   dta_mutated_filtered %>%
-  mutate(independence_dummy = ifelse(independence %in% c("6 Other"),
+  mutate(same_city = ifelse(independence %in% c("6 Other"),
                                       "other",
                                       "close"),
          job_parent = job_parent %>% fct_recode(`1 Private`="1 Agricultural",
@@ -172,11 +172,11 @@ var.summary <-
 
 options(qwraps2_markup = "markdown") 
 data1 <- 
-  dta_independence %>% filter(independence_dummy == "close") %>% select(one_of(var.summary))
+  dta_independence %>% filter(same_city == "close") %>% select(one_of(var.summary))
 table1 <-
   summary_table(data1)
 data2 <- 
-  dta_independence %>% filter(independence_dummy == "other") %>% select(one_of(var.summary))
+  dta_independence %>% filter(same_city == "other") %>% select(one_of(var.summary))
 table2 <-
   summary_table(data2)
 cbind(summary_table(dta_independence%>% select(one_of(var.summary))),
@@ -184,39 +184,187 @@ cbind(summary_table(dta_independence%>% select(one_of(var.summary))),
       table2) 
 ```
 
+#housing wealth distribution by male/female 
 ```{r}
-string.x <-
+table(dta_independence$sex_child,
+      dta_independence$ownership)
+
+table(dta_independence$sex_child,
+      dta_independence$ownership)%>%chisq.test()
+```
+
+```{r}
+ggplot() +
+  geom_density(
+    data = dta_independence %>% filter(sex_child == "1 Male",
+                                       homevalue>0,
+                                       homevalue<500000),
+    aes(homevalue),
+    color = "red",
+    alpha = 0.2
+  ) +
+  geom_density(
+    data = dta_independence %>% filter(sex_child == "2 Female",
+                                       homevalue>0,
+                                       homevalue<500000),
+    aes(homevalue),
+    color = "blue",
+    alpha = 0.2
+  )
+
+t.test(homevalue ~ sex_child, data = dta_independence%>%filter(homevalue>0))
+```
+
+#relationship with parents
+```{r}
+cor(dta_independence$homevalue[dta_independence$sex_child == "1 Male"],
+    dta_independence$asset_total[dta_independence$sex_child == "1 Male"],
+    use = "complete.obs")
+
+cor(dta_independence$homevalue[dta_independence$sex_child == "2 Female"],
+    dta_independence$asset_total[dta_independence$sex_child == "2 Female"],
+    use = "complete.obs")
+```
+
+#direct marriage transfer
+```{r}
+table(dta_independence$marriagehome,
+      dta_independence$sex_child)
+
+table(dta_independence$marriagehome,
+      dta_independence$sex_child)%>%chisq.test()
+```
+
+```{r}
+table(dta_independence$marriagehome,
+      dta_independence$ownership) 
+
+table(dta_independence$marriagehome,
+      dta_independence$ownership) %>%chisq.test()
+```
+
+```{r}
+ggplot() +
+  geom_density(
+    data = dta_independence %>% filter(marriagehome == FALSE,
+                                       homevalue>0,
+                                       homevalue<500000),
+    aes(homevalue),
+    color = "red",
+    alpha = 0.2
+  ) +
+  geom_density(
+    data = dta_independence %>% filter(marriagehome == TRUE,
+                                       homevalue>0,
+                                       homevalue<500000),
+    aes(homevalue),
+    color = "blue",
+    alpha = 0.2
+  )
+
+t.test(homevalue ~ marriagehome, data = dta_independence%>%filter(homevalue>0))
+```
+
+
+```{r}
+table(dta_independence$marriagehome[dta_independence$sex_child=="1 Male"],
+      dta_independence$siblings[dta_independence$sex_child=="1 Male"])
+
+table(dta_independence$marriagehome[dta_independence$sex_child=="1 Male"],
+      dta_independence$siblings[dta_independence$sex_child=="1 Male"])%>%chisq.test()
+```
+
+```{r}
+string.a <-
   paste(
-    ##control
-    #"urban_child",
-    ##child,
+##control
+    # "urban_child",
+##child,
     "age_child",
-    #"sex_child",
-    "numchildren",
-    "hukou_child",
-    #"party_child",
+    # "sex_child",
+    # "numchildren",
+    # "hukou_child",
+    # "party_child",
     "education_years_child",
-    "job_child_manager",
+    # "job_child_manager",
     "income_logged",
-    ##spouse
-    "education_years_spouse",
-    "hukou_spouse",
-    ##parent family
-    #"urban_parent",
+##spouse
+    # "education_years_spouse",
+    # "hukou_spouse",
+##parent family
+    # "urban_parent",
+    # "same_city",
     "siblings",
     "sibling_rank",
-    "education_years_parent",
-    #"job_parent",
-    "hukou_parent",
-    #"party_parent",
-    #"asset_total_flag",
+    # "education_years_parent",
+    # "job_parent",
+    # "hukou_parent",
+    # "party_parent",
+    # "asset_total_flag",
     "asset_total_logged",
     sep = " + "
   )
 formula.independence.marriagehome <-
   formula(paste("marriagehome ~",
-                "independence_dummy + ",
-                string.x))
+                string.a))
+ 
+export_summs(
+  glm(
+    formula.independence.marriagehome,
+    data = dta_independence%>%filter(sex_child=="1 Male"),
+    family = binomial
+  ),
+  error_pos = "same"
+  #,to.file = "xlsx",
+  #file.name = "writing/tables1/table2.formula.independence.marriagehome.demo.xlsx"
+)
+``` 
+
+#indirect transfer
+```{r}
+cor(dta_independence$homevalue[dta_independence$sex_child == "1 Male" &
+                                 dta_independence$marriagehome == FALSE],
+    dta_independence$asset_total[dta_independence$sex_child == "1 Male" &
+                                   dta_independence$marriagehome == FALSE],
+    use = "complete.obs")
+
+cor(dta_independence$homevalue[dta_independence$sex_child == "2 Female" &
+                                 dta_independence$marriagehome == FALSE],
+    dta_independence$asset_total[dta_independence$sex_child == "2 Female" &
+                                   dta_independence$marriagehome == FALSE],
+    use = "complete.obs")
+```
+  
+```{r}
+string.x <-
+  paste(
+##control
+    #"urban_child",
+##child,
+    "age_child",
+    # "sex_child",
+    "numchildren",
+    "hukou_child",
+    # "party_child",
+    "education_years_child",
+    "job_child_manager",
+    "income_logged",
+##spouse
+    "education_years_spouse",
+    # "hukou_spouse",
+##parent family
+    # "urban_parent",
+    # "same_city",
+    "siblings",
+    "sibling_rank",
+    "education_years_parent",
+    # "job_parent",
+    # "hukou_parent",
+    # "party_parent",
+    # "asset_total_flag",
+    "asset_total_logged",
+    sep = " + "
+  )
 
 formula.independence.ownership <-
   formula(paste("(ownership) ~",
@@ -225,24 +373,6 @@ formula.independence.ownership <-
 formula.independence.homevalue <-
   formula(paste("homevalue_logged ~",
                 string.x))
-```
-
-```{r}
-export_summs(
-  glm(
-    formula.independence.marriagehome,
-    data = dta_independence%>%filter(sex_child=="1 Male"),
-    family = binomial
-  ),
-  glm(
-    formula.independence.marriagehome,
-    data = dta_independence%>%filter(sex_child=="2 Female"),
-    family = binomial
-  ),
-  error_pos = "same"
-  #,to.file = "xlsx",
-  #file.name = "writing/tables1/table2.formula.independence.marriagehome.demo.xlsx"
-)
 ```
 
 ```{r}
