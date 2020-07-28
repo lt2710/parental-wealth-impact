@@ -903,10 +903,10 @@ child_2015 <-
                          0,
                          numchildren),
     marriage = marriage %>% fct_recode(
-      `1 Not married` = "3 Separated",
-      `1 Not married` = "4 Divorced",
-      `1 Not married` = "6 Never Married",
-      `1 Not married` = "7 Cohabitated",
+      `2 Married` = "3 Separated",
+      `2 Married` = "4 Divorced",
+      `1 Never married` = "6 Never Married",
+      `1 Never married` = "7 Cohabitated",
       `2 Married` = "1 Married With Spouse At Present",
       `2 Married` = "2 Married But Not Living With Spouse Temporarily",
       `2 Married` = "5 Widowed"
