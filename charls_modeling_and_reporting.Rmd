@@ -226,7 +226,7 @@ string.u <-
     # "job_parent",
     # "hukou_parent",
     # "party_parent",
-    "asset_total_flag",
+    # "asset_total_flag",
     "asset_total_logged",
     sep = " + "
   )
@@ -247,8 +247,8 @@ export_summs(
     family = binomial
   ),
   error_pos = "same"
-  #,to.file = "xlsx",
-  #file.name = "writing/tables1/table3.formula.independence.ownership.demo.xlsx"
+  ,to.file = "xlsx",
+  file.name = "writing/july 2020/1-never-married.xlsx"
 )
 ```
 
@@ -307,29 +307,29 @@ table(dta_independence$marriagehome[dta_independence$sex_child=="1 Male"],
 string.a <-
   paste(
 ##control
-    # "urban_child",
+    #"urban_child",
 ##child,
     "age_child",
     # "sex_child",
-    # "numchildren",
-    # "hukou_child",
+    "numchildren",
+    "hukou_child",
     # "party_child",
     "education_years_child",
-    # "job_child_manager",
+    "job_child_manager",
     "income_logged",
 ##spouse
-    # "education_years_spouse",
-    # "hukou_spouse",
+    "education_years_spouse",
+    "hukou_spouse",
 ##parent family
     # "urban_parent",
     # "same_city",
     "siblings",
     "sibling_rank",
-    # "education_years_parent",
+    "education_years_parent",
     # "job_parent",
     # "hukou_parent",
     # "party_parent",
-    "asset_total_flag",
+    # "asset_total_flag",
     "asset_total_logged",
     sep = " + "
   )
@@ -344,8 +344,8 @@ export_summs(
     family = binomial
   ),
   error_pos = "same"
-  #,to.file = "xlsx",
-  #file.name = "writing/tables1/table2.formula.independence.marriagehome.demo.xlsx"
+  ,to.file = "xlsx",
+  file.name = "writing/july-2020/2-married-gift-home.xlsx"
 )
 ``` 
 
@@ -365,7 +365,37 @@ cor(dta_independence$homevalue[dta_independence$sex_child == "2 Female" &
 ```
   
 ```{r}
-string.x <-
+string.early <-
+  paste(
+##control
+    #"urban_child",
+##child,
+    "age_child",
+    # "sex_child",
+    # "numchildren",
+    # "hukou_child",
+    # "party_child",
+    # "education_years_child",
+    # "job_child_manager",
+    # "income_logged",
+##spouse
+    # "education_years_spouse",
+    # "hukou_spouse",
+##parent family
+    # "urban_parent",
+    # "same_city",
+    "siblings",
+    "sibling_rank",
+    "education_years_parent",
+    # "job_parent",
+    # "hukou_parent",
+    # "party_parent",
+    # "asset_total_flag",
+    "asset_total_logged",
+    sep = " + "
+  )
+
+string.late <-
   paste(
 ##control
     #"urban_child",
@@ -380,7 +410,7 @@ string.x <-
     "income_logged",
 ##spouse
     "education_years_spouse",
-    # "hukou_spouse",
+    "hukou_spouse",
 ##parent family
     # "urban_parent",
     # "same_city",
@@ -390,46 +420,71 @@ string.x <-
     # "job_parent",
     # "hukou_parent",
     # "party_parent",
-    "asset_total_flag",
+    # "asset_total_flag",
     "asset_total_logged",
     sep = " + "
   )
 
-formula.independence.ownership <-
+formula.independence.ownership.early <-
   formula(paste("(ownership) ~",
-                string.x))
+                string.early))
+formula.independence.ownership.late <-
+  formula(paste("(ownership) ~",
+                string.late))
 
-formula.independence.homevalue <-
+formula.independence.homevalue.early <-
   formula(paste("homevalue_logged ~",
-                string.x))
+                string.early))
+formula.independence.homevalue.late <-
+  formula(paste("(homevalue_logged) ~",
+                string.late))
 ```
 
 ```{r}
 export_summs(
   glm(
-    formula.independence.ownership,
+    formula.independence.ownership.early,
+    data = dta_independence %>% filter(sex_child=="1 Male"),
+    family = binomial
+  ),  
+  glm(
+    formula.independence.ownership.late,
     data = dta_independence %>% filter(sex_child=="1 Male"),
     family = binomial
   ),
   glm(
-    formula.independence.ownership,
+    formula.independence.ownership.early,
+    data = dta_independence %>%filter(sex_child=="2 Female"),
+    family = binomial
+  ),
+  glm(
+    formula.independence.ownership.late,
     data = dta_independence %>%filter(sex_child=="2 Female"),
     family = binomial
   ),
   error_pos = "same"
-  #,to.file = "xlsx",
-  #file.name = "writing/tables1/table3.formula.independence.ownership.demo.xlsx"
+  ,to.file = "xlsx",
+  file.name = "writing/july-2020/3-married-ownership.xlsx"
 )
 ```
 
 
 ```{r}
-vglm(formula.independence.homevalue,
+vglm(formula.independence.homevalue.early,
+     tobit(Lower  = 1),
+     data = dta_independence %>%filter(sex_child=="1 Male")) %>%
+  summary()
+vglm(formula.independence.homevalue.late,
      tobit(Lower  = 1),
      data = dta_independence %>%filter(sex_child=="1 Male")) %>%
   summary()
 
-vglm(formula.independence.homevalue,
+vglm(formula.independence.homevalue.early,
+     tobit(Lower  = 1),
+     data = dta_independence %>%filter(sex_child=="2 Female")) %>%
+  summary()
+
+vglm(formula.independence.homevalue.late,
      tobit(Lower  = 1),
      data = dta_independence %>%filter(sex_child=="2 Female")) %>%
   summary()
@@ -438,13 +493,25 @@ vglm(formula.independence.homevalue,
 ```{r}
 export_summs(
   lm(
-    formula.independence.homevalue,
+    formula.independence.homevalue.early,
     data = dta_independence %>%
       filter(sex_child=="1 Male",
              ownership ==1)
   ),
   lm(
-    formula.independence.homevalue,
+    formula.independence.homevalue.late,
+    data = dta_independence %>%
+      filter(sex_child=="1 Male",
+             ownership ==1)
+  ),
+  lm(
+    formula.independence.homevalue.early,
+    data = dta_independence %>%
+      filter(sex_child=="2 Female",
+             ownership ==1)
+  ),
+  lm(
+    formula.independence.homevalue.late,
     data = dta_independence %>%
       filter(sex_child=="2 Female",
              ownership ==1)
