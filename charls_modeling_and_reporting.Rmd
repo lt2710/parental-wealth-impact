@@ -85,11 +85,10 @@ dta_mutated <-
       "asset_home",
       "asset_total"
     ),
-    .funs = list(flag = ~ ifelse(. == 0,
+    .funs = list(flag = ~ ifelse(. <= 0,
                                  1,
                                  0))
   )
-dta_mutated
 ```
  
 ## Filter observations
@@ -179,9 +178,78 @@ data2 <-
   dta_independence %>% filter(same_city == "other") %>% select(one_of(var.summary))
 table2 <-
   summary_table(data2)
-cbind(summary_table(dta_independence%>% select(one_of(var.summary))),
+cbind(summary_table(dta_independence %>% select(one_of(var.summary))),
       table1,
       table2) 
+```
+
+#never married
+```{r}
+data_never_married <-
+ dta_mutated %>% filter(
+    urban_child %in% c(
+      "1 Main City Zone",
+      "2 Combination Zone Between Urban and Rural Areas",
+      "3 The Town Center"
+      #"4 ZhenXiang Area"
+    ),
+    marriage == "1 Never married"
+  )
+
+table(data_never_married$sex_child,
+      data_never_married$ownership)
+
+table(data_never_married$sex_child,
+      data_never_married$ownership)%>%chisq.test()
+```
+
+```{r}
+string.u <-
+  paste(
+##control
+    #"urban_child",
+##child,
+    "age_child",
+    # "sex_child",
+    # "numchildren",
+    # "hukou_child",
+    # "party_child",
+    "education_years_child",
+    "job_child_manager",
+    "income_logged",
+##parent family
+    # "urban_parent",
+    # "same_city",
+    "siblings",
+    "sibling_rank",
+    # "education_years_parent",
+    # "job_parent",
+    # "hukou_parent",
+    # "party_parent",
+    "asset_total_flag",
+    "asset_total_logged",
+    sep = " + "
+  )
+
+formula.independence.ownership <-
+  formula(paste("(ownership) ~",
+                string.u)) 
+
+export_summs(
+  glm(
+    formula.independence.ownership,
+    data = data_never_married %>% filter(sex_child=="1 Male"),
+    family = binomial
+  ),
+    glm(
+    formula.independence.ownership,
+    data = data_never_married %>% filter(sex_child=="2 Female"),
+    family = binomial
+  ),
+  error_pos = "same"
+  #,to.file = "xlsx",
+  #file.name = "writing/tables1/table3.formula.independence.ownership.demo.xlsx"
+)
 ```
 
 #housing wealth distribution by male/female 
@@ -191,29 +259,10 @@ table(dta_independence$sex_child,
 
 table(dta_independence$sex_child,
       dta_independence$ownership)%>%chisq.test()
-```
-
-```{r}
-ggplot() +
-  geom_density(
-    data = dta_independence %>% filter(sex_child == "1 Male",
-                                       homevalue>0,
-                                       homevalue<500000),
-    aes(homevalue),
-    color = "red",
-    alpha = 0.2
-  ) +
-  geom_density(
-    data = dta_independence %>% filter(sex_child == "2 Female",
-                                       homevalue>0,
-                                       homevalue<500000),
-    aes(homevalue),
-    color = "blue",
-    alpha = 0.2
-  )
 
 t.test(homevalue ~ sex_child, data = dta_independence%>%filter(homevalue>0))
 ```
+ 
 
 #relationship with parents
 ```{r}
@@ -241,26 +290,6 @@ table(dta_independence$marriagehome,
 
 table(dta_independence$marriagehome,
       dta_independence$ownership) %>%chisq.test()
-```
-
-```{r}
-ggplot() +
-  geom_density(
-    data = dta_independence %>% filter(marriagehome == FALSE,
-                                       homevalue>0,
-                                       homevalue<500000),
-    aes(homevalue),
-    color = "red",
-    alpha = 0.2
-  ) +
-  geom_density(
-    data = dta_independence %>% filter(marriagehome == TRUE,
-                                       homevalue>0,
-                                       homevalue<500000),
-    aes(homevalue),
-    color = "blue",
-    alpha = 0.2
-  )
 
 t.test(homevalue ~ marriagehome, data = dta_independence%>%filter(homevalue>0))
 ```
@@ -300,7 +329,7 @@ string.a <-
     # "job_parent",
     # "hukou_parent",
     # "party_parent",
-    # "asset_total_flag",
+    "asset_total_flag",
     "asset_total_logged",
     sep = " + "
   )
@@ -361,7 +390,7 @@ string.x <-
     # "job_parent",
     # "hukou_parent",
     # "party_parent",
-    # "asset_total_flag",
+    "asset_total_flag",
     "asset_total_logged",
     sep = " + "
   )

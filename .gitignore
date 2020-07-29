@@ -1,6 +1,5 @@
 .gitignore
-*.pem
-*.RData
+*.pem 
 .Rhistory
 *.pdf
 CHARLS2011/
