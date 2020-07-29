@@ -137,10 +137,10 @@ var.summary <-
     #child,
     
     "age_child",
-    "sex_child",
+    # "sex_child",
     "numchildren",
     "hukou_child",
-    "party_child",
+    # "party_child",
     "education_years_child",
     "job_child_manager",
     "income_logged",
@@ -158,12 +158,12 @@ var.summary <-
     "siblings",
     "sibling_rank",
     "education_years_parent",
-    "job_parent",
-    "hukou_parent",
-    "party_parent",
-    "asset_total_flag",
+    # "job_parent",
+    # "hukou_parent",
+    # "party_parent",
+    # "asset_total_flag", 
     "asset_total_logged",
-    "urban_parent",
+    # "urban_parent",
     
     #control
     "urban_child"
@@ -171,11 +171,11 @@ var.summary <-
 
 options(qwraps2_markup = "markdown") 
 data1 <- 
-  dta_independence %>% filter(same_city == "close") %>% select(one_of(var.summary))
+  dta_independence %>% filter(sex_child == "1 Male") %>% select(one_of(var.summary))
 table1 <-
   summary_table(data1)
 data2 <- 
-  dta_independence %>% filter(same_city == "other") %>% select(one_of(var.summary))
+  dta_independence %>% filter(sex_child == "2 Female") %>% select(one_of(var.summary))
 table2 <-
   summary_table(data2)
 cbind(summary_table(dta_independence %>% select(one_of(var.summary))),
