@@ -248,7 +248,7 @@ export_summs(
   ),
   error_pos = "same"
   ,to.file = "xlsx",
-  file.name = "writing/july 2020/1-never-married.xlsx"
+  file.name = "output/1-never-married.xlsx"
 )
 ```
 
@@ -345,7 +345,7 @@ export_summs(
   ),
   error_pos = "same"
   ,to.file = "xlsx",
-  file.name = "writing/july-2020/2-married-gift-home.xlsx"
+  file.name = "output/2-married-gift-home.xlsx"
 )
 ``` 
 
@@ -464,7 +464,7 @@ export_summs(
   ),
   error_pos = "same"
   ,to.file = "xlsx",
-  file.name = "writing/july-2020/3-married-ownership.xlsx"
+  file.name = "output/3-married-ownership.xlsx"
 )
 ```
 
