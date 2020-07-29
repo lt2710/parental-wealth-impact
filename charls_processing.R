@@ -889,8 +889,7 @@ child_2015 <- child_raw_2015 %>% select(
   arrange(hhid, desc(age)) %>%
   group_by(hhid) %>%
   mutate(sibling_rank = row_number(),
-         siblings = n(),
-         have_other_sibling = (length(unique(na.omit(sex)))%>%pmax(1)-1)) %>%
+         siblings = n()) %>%
   ungroup()
 
 child_2015 %>% head()
