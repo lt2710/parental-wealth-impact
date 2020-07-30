@@ -278,14 +278,6 @@ cor(dta_independence$homevalue[dta_independence$sex_child == "2 Female"],
 #direct marriage transfer
 ```{r}
 table(dta_independence$marriagehome,
-      dta_independence$sex_child)
-
-table(dta_independence$marriagehome,
-      dta_independence$sex_child)%>%chisq.test()
-```
-
-```{r}
-table(dta_independence$marriagehome,
       dta_independence$ownership) 
 
 table(dta_independence$marriagehome,
@@ -294,13 +286,12 @@ table(dta_independence$marriagehome,
 t.test(homevalue ~ marriagehome, data = dta_independence%>%filter(homevalue>0))
 ```
 
-
 ```{r}
-table(dta_independence$marriagehome[dta_independence$sex_child=="1 Male"],
-      dta_independence$siblings[dta_independence$sex_child=="1 Male"])
+table(dta_independence$marriagehome,
+      dta_independence$sex_child)
 
-table(dta_independence$marriagehome[dta_independence$sex_child=="1 Male"],
-      dta_independence$siblings[dta_independence$sex_child=="1 Male"])%>%chisq.test()
+table(dta_independence$marriagehome,
+      dta_independence$sex_child)%>%chisq.test()
 ```
 
 ```{r}
