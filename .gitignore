@@ -1,11 +1,14 @@
-.gitignore
 *.pem 
+*.Rhistory
 .Rhistory
 *.pdf
 CHARLS2011/
 CHARLS2013/
 CHARLS2014/
 CHARLS2015/
+CHARLS2018/
 CHARLSharmonized/
+CHFS/
+CFPS/
 literature/
 writing/

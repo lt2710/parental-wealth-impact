@@ -1,4 +1,5 @@
 ## ----setup-------------------------------------------------------------------------------------------------------------------------
+#set working directory
 path_to_code<-rstudioapi::getActiveDocumentContext()$path
 main_directory<-strsplit(path_to_code,"/[a-zA-Z0-9_-]*.R$")[[1]]
 setwd(main_directory)
@@ -12,7 +13,8 @@ packages <- c(
   "readstata13",
   "knitr",
   "bit64",
-  "tidyverse"
+  "tidyverse",
+  "data.table"
 )
 packages <- lapply(
   packages,
@@ -26,18 +28,18 @@ packages <- lapply(
 select <- dplyr::select
 
 
-## ----import 2015 demographics------------------------------------------------------------------------------------------------------
+## ----import 2018 demographics------------------------------------------------------------------------------------------------------
 #read in data
-demographic_raw_2015 <-
+demographic_raw_2018 <-
   read.dta13(
-    "CHARLS2015/Demographic_Background.dta",
+    "CHARLS2018/Demographic_Background.dta",
     convert.factors = TRUE,
     generate.factors = TRUE
-  ) 
+  )
 
 ## ----------------------------------------------------------------------------------------------------------------------------------
-demographic_2015 <-
-  demographic_raw_2015 %>%
+demographic_2018 <-
+  demographic_raw_2018 %>%
   #select necessary variables
   select(
     id = ID,
@@ -49,26 +51,28 @@ demographic_2015 <-
     urban_change = bb001_w3,
     new_urban = bb001_w3_2
   ) %>%
-  #generate age at 2015
-  mutate(age = 2015 - birthyear) %>%
+  #generate age at 2018
+  mutate(age = 2018 - birthyear) %>%
   select(-birthyear) %>%
   #generate accurate address
   mutate(
     urban = ifelse(
-      urban_change == "1 ZLocation",
+      urban_change == "1 Address during Last Survey",
       last_urban %>% as.character(),
       ifelse(
-        urban_change == "2 Other Province/City/County Township Villiage/Neiborhood	",
+        urban_change == "2 Other Place",
         new_urban %>% as.character(),
         NA
       )
-    ) %>% as.factor()
+    ) %>%
+      recode(`4 Special Zone` = "1 Central of City/Town")%>% 
+      as.factor()
   ) %>%
   select(-last_urban, 
          -urban_change, 
          -new_urban)
 
-demographic_2015 %>% head()
+demographic_2018 %>% head()
 
 
 ## ----import 2014 demographics------------------------------------------------------------------------------------------------------
@@ -89,84 +93,65 @@ residence_2014 <-
   select(id = ID,
          birthyear = rbirthyear)
 
-
 ## ----------------------------------------------------------------------------------------------------------------------------------
-#read hukou data
-hukou_2014 <- demographic_raw_2014 %>% select(
-  id = ID,
-  hhid = householdID,
-  hukoutype,#original type
-  hk002_1_1_:hk002_1_6_,#year of change
-  hk004_1_:hk004_6_#new type
-) %>%
-  left_join(residence_2014, by = "id")
-
-
-## ----------------------------------------------------------------------------------------------------------------------------------
-#set ideal year to be when the respondent is 40yrs old
-career_age <- 40
-#calculate the gap between years of change and ideal year
-hukou_long <- hukou_2014 %>%
-  transmute(
-    id = id,
-    hk004_1_ = birthyear + career_age - hk002_1_1_,
-    hk004_2_ = birthyear + career_age - hk002_1_2_,
-    hk004_3_ = birthyear + career_age - hk002_1_3_,
-    hk004_4_ = birthyear + career_age - hk002_1_4_,
-    hk004_5_ = birthyear + career_age - hk002_1_5_,
-    hk004_6_ = birthyear + career_age - hk002_1_6_,
-    hukoutype = birthyear + career_age - birthyear
-  )
-#for a given row, output the column whose time is right before the ideal year
-hukou_var <- hukou_long %>%
-  gather(column, value,-id,) %>%
-  group_by(id) %>%
-  filter(value > 0|is.na(value))%>%
-  filter(rank(value) == 1) %>%
-  select(-value) %>%
-  arrange(id)
-#display
-hukou_var %>% head()
-
-
-## ----------------------------------------------------------------------------------------------------------------------------------
-#join var into hukou
-hukou_2014 <- full_join(hukou_2014,
-                        hukou_var,
-                        by = "id") %>%
-  mutate(hukou = NULL,
-         column = column %>% replace_na("hukoutype"))
-#extract hukou status in the value
-for (i in 1:nrow(hukou_2014)) {
-  varname <- hukou_2014$column[i]
-  hukou_2014$hukou[i] <- hukou_2014[[varname]][i]
-}
-#keep relevant variables
-hukou_2014 <- hukou_2014 %>%
-  select(id, hukou) %>% 
-  mutate(hukou = hukou %>%
-           fct_recode(`1 Agricultural Hukou`="4 None",
-                      `1 Agricultural Hukou`="3 Unified Residence Hukou"))
-
-hukou_2014 %>% head()
-
+# hukou
+hukou_2018 <- demographic_raw_2018 %>%
+  select(
+    id = ID,
+    hukou_last = zbc004,
+    hukou_correct = bc001_w3_1,
+    hukou_last_correct = bc001_w3_2,
+    hukou_change = bc002_w3,
+    hukou_new = bc002_w3_1
+  ) %>%
+  mutate(
+    hukou = ifelse(
+      is.na(hukou_new),
+      ifelse(
+        is.na(hukou_last_correct),
+        hukou_last %>% as.character(),
+        hukou_last_correct %>% as.character()
+      ),
+      hukou_new %>% as.character()
+    ),
+    hukou = hukou %>%
+      fct_recode(
+        `1 Agricultural Hukou` = "4 Do not have Hukou",
+        `1 Agricultural Hukou` = "4 Do Not Have Hukou",
+        `1 Agricultural Hukou` = "3 Unified Residence Hukou"
+      )
+  )%>%
+  select(id,
+         hukou)
+hukou_2018 %>% head()
 
 ## ----------------------------------------------------------------------------------------------------------------------------------
 #restrucutre party column
-party_2014 <- demographic_raw_2014 %>%
+party_2018 <- demographic_raw_2018 %>%
   select(id = ID,
-         party = p022s1) %>%
+         party = bg004_w4) %>%
   mutate(party = party %>%
            as.numeric () %>%
-           replace_na(0) %>%
+           recode (2,1)%>%
            factor(
-             levels = c(0, 1),
-             labels = c("0 non party member", "1 party member")
+             levels = c(1, 2),
+             labels = c("1 Non Party Member","2 Party Member")
            ))
-party_2014 %>% head()
-
+party_2018 %>% head()
 
 ## ----import education--------------------------------------------------------------------------------------------------------------
+#education 2018
+education_raw_2018 <-
+  read.dta13(
+    "CHARLS2018/Demographic_Background.dta",
+    convert.factors = TRUE,
+    generate.factors = TRUE
+  )
+education_2018 <- education_raw_2018 %>%
+  select(id = ID,
+         education18 = bd001_w2_4) %>%
+  mutate(education18 = education18 %>%
+           fct_recode(NULL = "12 No Change"))
 #education 2015
 education_raw_2015 <-
   read.dta13(
@@ -176,9 +161,7 @@ education_raw_2015 <-
   )
 education_2015 <- education_raw_2015 %>%
   select(id = ID,
-         education15 = bd001_w2_4) %>%
-  mutate(education15 = education15 %>%
-           fct_recode(NULL = "12 No Change"))
+         education15 = bd001_w2_4)
 #education 2013
 education_raw_2013 <-
   read.dta13(
@@ -191,20 +174,22 @@ education_2013 <- education_raw_2013 %>%
          education11 = zbd001,
          education13 = bd001)
 
-
 ## ----------------------------------------------------------------------------------------------------------------------------------
 #merge all data and replace in order
 education_merged <-
-  education_2015 %>%
+  education_2018 %>%
+  left_join(education_2015, by = "id") %>%
   left_join(education_2013, by = "id") %>%
   mutate_if(is.factor, as.numeric) %>%
   transmute(id = id,
             education = ifelse(
-              is.na(education15),
-              ifelse(is.na(education13),
-                     education11,
-                     education13),
-              education15
+              is.na(education18),
+              ifelse(is.na(education15),
+                     ifelse(is.na(education13),
+                            education11,education13
+                            ),
+                     education15),
+              education18
             ))
 #recode lavel
 education_merged  <-
@@ -228,6 +213,7 @@ work_raw_2014 <-
 
 ## ----------------------------------------------------------------------------------------------------------------------------------
 #subset variables
+career_age <- 40
 work_2014 <- work_raw_2014 %>%
   select(
     id = ID,
@@ -338,135 +324,135 @@ psu <- read.dta13("CHARLS2013/PSU.dta",
                   fromEncoding = "GB2312",
                   convert.factors = FALSE)
 #city name missalinius
-psu$city[psu$city == "北京"] <- "北京市"
-psu$city[psu$city == "哈尔滨"] <- "哈尔滨市"
-psu$city[psu$city == "天津"] <- "天津市"
+psu$city[psu$city == "??????"] <- "?????????"
+psu$city[psu$city == "?????????"] <- "????????????"
+psu$city[psu$city == "??????"] <- "?????????"
 #a new tier variable
 psu$tier <- NA
 psu$tier[psu$city %in% c(
-  "上海市",
-  "北京市",
-  "广州市",
-  "深圳市",
-  "重庆市",
-  "天津市",
-  "苏州市",
-  "成都市",
-  "武汉市",
-  "杭州市",
-  "南京市",
-  "西安市",
-  "长沙市",
-  "沈阳市",
-  "青岛市",
-  "郑州市",
-  "大连市",
-  "东莞市",
-  "宁波市"
+  "?????????",
+  "?????????",
+  "?????????",
+  "?????????",
+  "?????????",
+  "?????????",
+  "?????????",
+  "?????????",
+  "?????????",
+  "?????????",
+  "?????????",
+  "?????????",
+  "?????????",
+  "?????????",
+  "?????????",
+  "?????????",
+  "?????????",
+  "?????????",
+  "?????????"
 )] <- "1st tier"
 psu$tier[psu$city %in% c(
-  "厦门市",
-  "福州市",
-  "无锡市",
-  "合肥市",
-  "昆明市",
-  "哈尔滨市",
-  "济南市",
-  "佛山市",
-  "长春市",
-  "温州市",
-  "石家庄市",
-  "南宁市",
-  "常州市",
-  "泉州市",
-  "南昌市",
-  "贵阳市",
-  "太原市",
-  "烟台市",
-  "嘉兴市",
-  "南通市",
-  "金华市",
-  "珠海市",
-  "惠州市",
-  "徐州市",
-  "海口市",
-  "乌鲁木齐市",
-  "绍兴市",
-  "中山市",
-  "台州市",
-  "兰州市"
+  "?????????",
+  "?????????",
+  "?????????",
+  "?????????",
+  "?????????",
+  "????????????",
+  "?????????",
+  "?????????",
+  "?????????",
+  "?????????",
+  "????????????",
+  "?????????",
+  "?????????",
+  "?????????",
+  "?????????",
+  "?????????",
+  "?????????",
+  "?????????",
+  "?????????",
+  "?????????",
+  "?????????",
+  "?????????",
+  "?????????",
+  "?????????",
+  "?????????",
+  "???????????????",
+  "?????????",
+  "?????????",
+  "?????????",
+  "?????????"
 )] <- "2nd tier"
 psu$tier[psu$city %in% c(
-  "潍坊市",
-  "保定市",
-  "镇江市",
-  "扬州市",
-  "桂林市",
-  "唐山市",
-  "三亚市",
-  "湖州市",
-  "呼和浩特市",
-  "廊坊市",
-  "洛阳市",
-  "威海市",
-  "盐城市",
-  "临沂市",
-  "江门市",
-  "汕头市",
-  "泰州市",
-  "漳州市",
-  "邯郸市",
-  "济宁市",
-  "芜湖市",
-  "淄博市",
-  "银川市",
-  "柳州市",
-  "绵阳市",
-  "湛江市",
-  "鞍山市",
-  "赣州市",
-  "大庆市",
-  "宜昌市",
-  "包头市",
-  "咸阳市",
-  "秦皇岛市",
-  "株洲市",
-  "莆田市",
-  "吉林市",
-  "淮安市",
-  "肇庆市",
-  "宁德市",
-  "衡阳市",
-  "南平市",
-  "连云港市",
-  "丹东市",
-  "丽江市",
-  "揭阳市",
-  "延边朝鲜族自治州",
-  "舟山市",
-  "九江市",
-  "龙岩市",
-  "沧州市",
-  "抚顺市",
-  "襄阳市",
-  "上饶市",
-  "营口市",
-  "三明市",
-  "蚌埠市",
-  "丽水市",
-  "岳阳市",
-  "清远市",
-  "荆州市",
-  "泰安市",
-  "衢州市",
-  "盘锦市",
-  "东营市",
-  "南阳市",
-  "马鞍山市",
-  "南充市",
-  "西宁市",
-  "孝感市",
-  "齐齐哈尔市"
+  "?????????",
+  "?????????",
+  "?????????",
+  "?????????",
+  "?????????",
+  "?????????",
+  "?????????",
+  "?????????",
+  "???????????????",
+  "?????????",
+  "?????????",
+  "?????????",
+  "?????????",
+  "?????????",
+  "?????????",
+  "?????????",
+  "?????????",
+  "?????????",
+  "?????????",
+  "?????????",
+  "?????????",
+  "?????????",
+  "?????????",
+  "?????????",
+  "?????????",
+  "?????????",
+  "?????????",
+  "?????????",
+  "?????????",
+  "?????????",
+  "?????????",
+  "?????????",
+  "????????????",
+  "?????????",
+  "?????????",
+  "?????????",
+  "?????????",
+  "?????????",
+  "?????????",
+  "?????????",
+  "?????????",
+  "????????????",
+  "?????????",
+  "?????????",
+  "?????????",
+  "????????????????????????",
+  "?????????",
+  "?????????",
+  "?????????",
+  "?????????",
+  "?????????",
+  "?????????",
+  "?????????",
+  "?????????",
+  "?????????",
+  "?????????",
+  "?????????",
+  "?????????",
+  "?????????",
+  "?????????",
+  "?????????",
+  "?????????",
+  "?????????",
+  "?????????",
+  "?????????",
+  "????????????",
+  "?????????",
+  "?????????",
+  "?????????",
+  "???????????????"
 )] <- "3rd tier"
 psu$tier<-
   psu$tier%>%replace_na("4th tier")
@@ -482,11 +468,11 @@ psu <- psu %>%
 psu %>% head()
 
 
-## ----Merge all 2014----------------------------------------------------------------------------------------------------------------
+## ----Merge all 2018----------------------------------------------------------------------------------------------------------------
 parent_ind <-
-  demographic_2015 %>%
-  left_join(hukou_2014, by = "id") %>%
-  left_join(party_2014, by = "id") %>%
+  demographic_2018 %>%
+  left_join(hukou_2018, by = "id") %>%
+  left_join(party_2018, by = "id") %>%
   left_join(education_merged, by = "id") %>%
   left_join(work_merged, by = "id") %>% 
   left_join(psu, by = "cid")
@@ -499,115 +485,127 @@ parent_ind_hh <-
 
 parent_ind_hh %>% head()
 
-
 ## ----ind income--------------------------------------------------------------------------------------------------------------------
-ind_income_raw_2015 <-
+ind_income_raw_2018 <-
   read.dta13(
-    "CHARLS2015/Individual_Income.dta",
+    "CHARLS2018/Individual_Income.dta",
     convert.factors = TRUE,
     generate.factors = TRUE
   )
-ind_income_2015 <- ind_income_raw_2015 %>%
+ind_income_2018 <- ind_income_raw_2018 %>%
   select(
     id = ID,
     #Asset
     hhid = householdID,
     hc001,
+    hc002_max:hc002_min,
     #cash on hand
-    hc002_bracket_max:hc002_bracket_min,
-    hc005,
+    hc003_w4,
+    hc004_w4_max,hc004_w4_min,
     #Bank deposit,
-    hc006_bracket_max,
-    hc006_bracket_min,
-    hc008,
+    hc005,
+    hc006_max,
+    hc006_min,
     #gov bond,
-    hc009_bracket_max,
-    hc009_bracket_min,
-    hc013,
+    hc008,
+    hc009_max,
+    hc009_min,
     #stock
-    hc014_bracket_max,
-    hc014_bracket_min,
-    hc018,
+    hc013,
+    hc014_max,
+    hc014_min,
     #funds
-    hc019_bracket_max,
-    hc019_bracket_min,
-    hc028,
+    hc018,
+    hc019_max,
+    hc019_min,
+    #other portfolio
+    hc017_w4,
+    hc017_w4_max,
+    hc017_w4_min,
+    #portfollio under other's name
+    hc022,
     #HPF
-    hc029_bracket_max,
-    hc029_bracket_min,
-    hc031,
+    hc028,
+    hc029_max,
+    hc029_min,
     #work unit funding
-    hc032_bracket_max,
-    hc032_bracket_min,
-    hc034,
+    hc031,
+    hc032_max,
+    hc032_min,
     #unpaid salary
-    hc035_bracket_max,
-    hc035_bracket_min,
+    hc034,
+    hc035_max,
+    hc035_min,
     #Debt
     hc040_w3,
     #debt collectable
-    hc041_w3_bracket_max,
-    hc041_w3_bracket_min,
+    hc041_w3_max,
+    hc041_w3_min,
     hd001,
     #unpaid private debt
-    hd002_bracket_max,
-    hd002_bracket_min,
-    hc037,
+    hd002_max,
+    hd002_min,
     #payable private debt,
-    hc038_w3_bracket_max,
-    hc038_w3_bracket_min,
     hd003,
     #credit card payable
-    hd004_bracket_max,
-    hd004_bracket_min,
+    hd004_max,
+    hd004_min,
     hd004_w3,
     #other debt payable
-    hd004_w3_1_bracket_max,
-    hd004_w3_1_bracket_min
+    hd004_w3_1_max,
+    hd004_w3_1_min
   )
 
 
 ## ----------------------------------------------------------------------------------------------------------------------------------
 #replace all NA into 0
-ind_income_2015[is.na(ind_income_2015)] <- 0
+ind_income_2018[is.na(ind_income_2018)] <- 0
 #construct wealth measure
-hh_fin_2015 <- ind_income_2015 %>%
+hh_fin_2018 <- ind_income_2018 %>%
   mutate(
-    asset = (hc001 * 2 + hc002_bracket_max + hc002_bracket_min) / 2 +
-      (hc005 * 2 + hc006_bracket_max + hc006_bracket_min) /
+    asset = (hc001 * 2 + hc002_max + hc002_min) / 2 +
+      (hc003_w4 * 2 + hc004_w4_max + hc004_w4_min) / 
       2 +
-      (hc008 * 2 + hc009_bracket_max + hc009_bracket_min) /
+      (hc005 * 2 + hc006_max + hc006_min) /
       2 +
-      (hc013 * 2 + hc014_bracket_max + hc014_bracket_min) /
+      (hc008 * 2 + hc009_max + hc009_min) /
       2 +
-      (hc018 * 2 + hc019_bracket_max + hc019_bracket_min) /
+      (hc013 * 2 + hc014_max + hc014_min) /
       2 +
-      (hc028 * 2 + hc029_bracket_max + hc029_bracket_min) /
+      (hc017_w4 * 2 + hc017_w4_max + hc017_w4_min) /
       2 +
-      (hc031 * 2 + hc032_bracket_max + hc032_bracket_min) /
+      hc022 +
+      (hc018 * 2 + hc019_max + hc019_min) /
       2 +
-      (hc034 * 2 + hc035_bracket_max + hc035_bracket_min) /
+      (hc028 * 2 + hc029_max + hc029_min) /
       2 +
-      (hc040_w3 * 2 + hc041_w3_bracket_max + hc041_w3_bracket_min) /
+      (hc031 * 2 + hc032_max + hc032_min) /
+      2 +
+      (hc034 * 2 + hc035_max + hc035_min) /
+      2 +
+      (hc040_w3 * 2 + hc041_w3_max + hc041_w3_min) /
       2,
     debt =
-      (hd001 * 2 + hd002_bracket_max + hd002_bracket_min) /
+      (hd001 * 2 + hd002_max + hd002_min) /
       2 +
-      (hc037 * 2 + hc038_w3_bracket_max + hc038_w3_bracket_min) /
+      (hd003 * 2 + hd004_max + hd004_min) /
       2 +
-      (hd003 * 2 + hd004_bracket_max + hd004_bracket_min) /
-      2 +
-      (hd004_w3 * 2 + hd004_w3_1_bracket_max + hd004_w3_1_bracket_min) /
+      (hd004_w3 * 2 + hd004_w3_1_max + hd004_w3_1_min) /
       2,
     ind_fin = asset - debt
   ) %>% 
   group_by(hhid) %>% 
   summarise(asset_fin = sum(ind_fin, na.rm = TRUE))
 
-hh_fin_2015 %>% head()
+hh_fin_2018 %>% head()
 
 
 ## ----household income--------------------------------------------------------------------------------------------------------------
+hh_income_raw_2018 <- read.dta13(
+  "CHARLS2018/Household_Income.dta",
+  convert.factors = TRUE,
+  generate.factors = TRUE
+)
 hh_income_raw_2015 <- read.dta13(
   "CHARLS2015/Household_Income.dta",
   convert.factors = TRUE,
@@ -616,22 +614,22 @@ hh_income_raw_2015 <- read.dta13(
 
 
 ## ----durable and fixed-------------------------------------------------------------------------------------------------------------
-hh_durable_fixed_2015 <- hh_income_raw_2015 %>% select(
+hh_durable_fixed_2018 <- hh_income_raw_2018 %>% select(
   hhid = householdID,
   ha057_1_:ha057_4_,
   #lands
-  ha065_1_1_:ha065_1_19_,
+  ha066_w4_1:ha066_w4_7,
   #durables
-  ha066_1_1_:ha066_1_6_,
+  ha065_1:ha065_18,
   #fixed asset for agriculture
-  ha067,
+  ha067_w4,
   #fixed asset for business
   ha068_1#other fixed asset
 )
 #recode all NA to 0
-hh_durable_fixed_2015[is.na(hh_durable_fixed_2015)] <- 0
+hh_durable_fixed_2018[is.na(hh_durable_fixed_2018)] <- 0
 #compute land and durables
-hh_durable_fixed_2015 <- hh_durable_fixed_2015 %>% mutate(
+hh_durable_fixed_2018 <- hh_durable_fixed_2018 %>% mutate(
   asset_land =
     (ha057_1_ +
        ha057_1_ +
@@ -639,39 +637,39 @@ hh_durable_fixed_2015 <- hh_durable_fixed_2015 %>% mutate(
        ha057_3_ +
        ha057_4_) * 20,
   asset_durable_fixed =
-    ha065_1_1_ +
-    ha065_1_2_ +
-    ha065_1_3_ +
-    ha065_1_4_ +
-    ha065_1_5_ +
-    ha065_1_6_ +
-    ha065_1_7_ +
-    ha065_1_8_ +
-    ha065_1_9_ +
-    ha065_1_10_ +
-    ha065_1_11_ +
-    ha065_1_12_ +
-    ha065_1_13_ +
-    ha065_1_14_ +
-    ha065_1_15_ +
-    ha065_1_16_ +
-    ha065_1_17_ +
-    ha065_1_18_ +
-    ha065_1_19_ +
-    ha066_1_1_ +
-    ha066_1_2_ +
-    ha066_1_3_ +
-    ha066_1_4_ +
-    ha066_1_5_ +
-    ha066_1_6_ +
-    ha067 +
+    ha065_1 +
+    ha065_2 +
+    ha065_3 +
+    ha065_4 +
+    ha065_5 +
+    ha065_6 +
+    ha065_7 +
+    ha065_8 +
+    ha065_9 +
+    ha065_10 +
+    ha065_11 +
+    ha065_12 +
+    ha065_13 +
+    ha065_14 +
+    ha065_15 +
+    ha065_16 +
+    ha065_17 +
+    ha065_18 +
+    ha066_w4_1 +
+    ha066_w4_2 +
+    ha066_w4_3 +
+    ha066_w4_4 +
+    ha066_w4_5 +
+    ha066_w4_6 +
+    ha066_w4_7 +
+    ha067_w4 +
     ha068_1
 )
-hh_durable_fixed_2015 <- hh_durable_fixed_2015 %>% select(hhid,
+hh_durable_fixed_2018 <- hh_durable_fixed_2018 %>% select(hhid,
                                           asset_land,
                                           asset_durable_fixed)
 
-hh_durable_fixed_2015 %>% head()
+hh_durable_fixed_2018 %>% head()
 
 
 ## ----home characteristics 2013-----------------------------------------------------------------------------------------------------
@@ -687,171 +685,148 @@ hh_house_2013 <- hh_income_raw_2013 %>%
 
 
 ## ----house-------------------------------------------------------------------------------------------------------------------------
-hh_house_2015 <- hh_income_raw_2015 %>% select(
-  hhid = householdID,
-  samehouse = ha000_w2_1,
-  ownership = ha007,
-  valueinprice = ha011_1,
-  valueinunit = ha011_2,
-  bracketlow = ha012_bracket_min,
-  brackethigh = ha012_bracket_max,
-) %>%
-  mutate(
-    ownership = ownership %>%
-      fct_recode(`1 Owned by Household Member` = "2 Partly Owned by Household Member"),
-    valueinprice = ifelse(valueinprice > 1000,
-                          valueinprice / 10000,
-                          valueinprice) * 10000,
-    valueinunit = ifelse(valueinunit > 500,
-                         valueinunit / 1000,
-                         valueinunit) * 1000,
-    bracketlow = ifelse(is.na(bracketlow) & is.na(brackethigh)==FALSE,
-                        brackethigh,
-                        bracketlow),
-    brackethigh = ifelse(is.na(brackethigh) & is.na(bracketlow)==FALSE,
-                        bracketlow,
-                        brackethigh),
-  ) %>%
-  left_join(hh_house_2013, by = "hhid")
-
-
-## ----create home value-------------------------------------------------------------------------------------------------------------
-hh_primaryhome_2015 <- hh_house_2015 %>%
-  transmute(
-    hhid = hhid,
-    homevalue = ifelse(
-      ownership == "3 None of Household Member",
-      0,
-      ifelse(
-        is.na(valueinprice),
-        ifelse(
-          is.na(valueinunit) &
-            is.na(valueinunit) == FALSE & samehouse == "1 Yes",
-          (bracketlow + brackethigh) / 2,
-          valueinunit * buildarea
-        ),
-        valueinprice
-      )
-    )
-  )
-hh_primaryhome_2015 %>% head()
-
-
-## ----------------------------------------------------------------------------------------------------------------------------------
-hh_otherhome_2015 <- hh_income_raw_2015 %>%
-  select(hhid = householdID,
-         ha045_1_1_:ha045_1_3_,
-         ha045_2_1_:ha045_2_3_,
-         ha051_1_:ha051_3_)
-hh_otherhome_2015[is.na(hh_otherhome_2015)] <- 0
-hh_otherhome_2015 <-
-  hh_otherhome_2015 %>%
-  transmute(
-    hhid = hhid,
-    otherhomevalue15 = (
-      ha045_1_1_ * 10000 +
-        ha045_1_2_ * 10000 +
-        ha045_1_3_ * 10000 +
-        ha045_2_1_ * ha051_1_ * 1000 +
-        ha045_2_2_ * ha051_2_ * 1000 +
-        ha045_2_3_ * ha051_3_ * 1000
-    ) %>% 
-      pmin(500000) %>%
-      replace_na(0)
-  )
-hh_otherhome_2015 %>% head()
-
-
-## ----------------------------------------------------------------------------------------------------------------------------------
-hh_otherhome_2013 <- hh_income_raw_2013 %>%
-  select(hhid = householdID,
-         ha034_1_1_:ha034_1_4_,
-         ha034_2_1_:ha034_2_4_,
-         ha051_1_:ha051_4_)
-hh_otherhome_2013[is.na(hh_otherhome_2013)] <- 0
-hh_otherhome_2013 <-
-  hh_otherhome_2013 %>%
-  transmute(
-    hhid = hhid,
-    otherhomevalue13 = (
-      ha034_1_1_ * 10000 +
-        ha034_1_2_ * 10000 +
-        ha034_1_3_ * 10000 +
-        ha034_1_4_ * 10000 +
-        ha034_2_1_ * ha051_1_ * 1000 +
-        ha034_2_2_ * ha051_2_ * 1000 +
-        ha034_2_3_ * ha051_3_ * 1000 +
-        ha034_2_3_ * ha051_3_ * 1000
-    ) %>% 
-      pmin(500000) %>%
-      replace_na(0)
-  )
-hh_otherhome_2013 %>% head()
-
-
-## ----------------------------------------------------------------------------------------------------------------------------------
-hh_income_raw_2011 <-
+hh_house_raw_2018 <-
   read.dta13(
-    "CHARLS2011/household_income.dta",
+    "CHARLS2018/Housing.dta",
     convert.factors = TRUE,
     generate.factors = TRUE
   )
-hh_otherhome_2011 <- hh_income_raw_2011 %>%
-  select(hhid = householdID,
-         ha034_1_1_:ha034_1_3_,
-         ha034_2_1_:ha034_2_3_,
-         ha051_1_:ha051_3_) %>%
-  mutate(hhid = hhid %>% paste("0", sep = ""))#a bug of hhid 2011
-hh_otherhome_2011[is.na(hh_otherhome_2011)] <- 0
-hh_otherhome_2011 <-
-  hh_otherhome_2011 %>%
-  transmute(
-    hhid = hhid,
-    otherhomevalue11 = (
-      ha034_1_1_ * 10000 +
-        ha034_1_2_ * 10000 +
-        ha034_1_3_ * 10000 +
-        ha034_2_1_ * ha051_1_ * 1000 +
-        ha034_2_2_ * ha051_2_ * 1000 +
-        ha034_2_3_ * ha051_3_ * 1000
-    ) %>% 
-      pmin(500000) %>%
+hh_house_2018 <- hh_house_raw_2018 %>% 
+  select(
+    hhid = householdID,
+    #last wave
+    #area 
+    zsize_1_:zsize_7_,
+    #property value
+    zvaluelasttime_1_:zvaluelasttime_7_,
+    #this time
+    #value/unit 
+    ha004_w4_1_:ha004_w4_7_,
+    #total value update
+    ha004_w4_1_1_:ha004_w4_1_7_,
+    #unit value update
+    ha004_w4_2_1_:ha004_w4_2_5_,
+    #unit value estimate
+    ha004_w4_1__max:ha004_w4_6__max,
+    ha004_w4_1__min:ha004_w4_6__min,
+    #new respondent or new house of old respondent
+    #area
+    ha035_w4_1_:ha035_w4_11_,
+    #value/unit
+    ha036_w4_1_:ha036_w4_11_,
+    #total value update
+    ha036_w4_1_1_:ha036_w4_1_11_,
+    #unit value update
+    ha036_w4_2_1_:ha036_w4_2_7_,
+    #unit value estimat
+    ha036_w4_1__max:ha036_w4_2__max,
+    ha036_w4_1__min:ha036_w4_2__min
+    ) %>%
+  #treat total value above 1000k as incorretly coded value. cap value at 500. 
+  mutate_at(vars(matches("ha004_w4_1_[[:digit:]]_")), function(x){return(ifelse(x>=1000,x/10000,ifelse(x>500,500,x)))}) %>%
+  mutate_at(vars(matches("ha036_w4_1_[[:digit:]]_")), function(x){return(ifelse(x>=1000,x/10000,ifelse(x>500,500,x)))}) %>%
+  #treat unit value above 20k as incorretly coded value 
+  mutate_at(vars(matches("ha004_w4_2_[[:digit:]]_")), function(x){return(ifelse(x>50,x/1000,x))}) %>%
+  mutate_at(vars(matches("ha036_w4_2_[[:digit:]]_")), function(x){return(ifelse(x>50,x/1000,x))})
+# use coalescne to impute missing min/max
+for (i in 1:6){
+  var_max <- paste0("ha004_w4_",i,"__max")
+  var_min <- paste0("ha004_w4_",i,"__min")
+  hh_house_2018 <- hh_house_2018 %>%
+    mutate({{var_max}} := coalesce(!!as.name(var_max), !!as.name(var_min)),
+           {{var_min}} := coalesce(!!as.name(var_min), !!as.name(var_max))
+    )
+}
+for (i in 1:2){
+  var_max <- paste0("ha036_w4_",i,"__max")
+  var_min <- paste0("ha036_w4_",i,"__min")
+  hh_house_2018 <- hh_house_2018 %>%
+    mutate({{var_max}} := coalesce(!!as.name(var_max), !!as.name(var_min)),
+           {{var_min}} := coalesce(!!as.name(var_min), !!as.name(var_max))
+    )
+}
+# assign some fake columns to make loops 
+vars_to_create <- c(
+  paste0("ha004_w4_2_",c(1:7),"_"),
+  paste0("ha004_w4_",c(1:7),"__max"),
+  paste0("ha004_w4_",c(1:7),"__min"),
+  paste0("ha036_w4_2_",c(1:11),"_"),
+  paste0("ha036_w4_",c(1:11),"__max"),
+  paste0("ha036_w4_",c(1:11),"__min")
+)
+for(x in vars_to_create){
+  if(is.null(hh_house_2018[[x]])) {
+    hh_house_2018 <- hh_house_2018%>%
+      mutate({{x}} := NA)
+  }
+}
+# calculate housing value
+# old record value
+for (i in 1:7){
+  var_present_value = paste0("old_property_", i)
+  hh_house_2018 <- hh_house_2018 %>%
+    mutate({{var_present_value}} := ifelse(#whether has new value
+                                           !is.na(!!as.name(paste0("ha004_w4_",i,"_"))),
+                                           #has new value
+                                           coalesce(# concrete value
+                                             as.numeric(!!as.name(paste0("ha004_w4_1_",i,"_"))),
+                                             # unit value * area
+                                             as.numeric(!!as.name(paste0("ha004_w4_2_",i,"_")))*as.numeric(!!as.name(paste0("zsize_",i,"_")))/10,
+                                             # unit value min/max * area
+                                             #average min/max
+                                             ((as.numeric(!!as.name(paste0("ha004_w4_",i,"__min"))) + as.numeric(!!as.name(paste0("ha004_w4_",i,"__max"))))/2)*
+                                               #size
+                                               as.numeric(!!as.name(paste0("zsize_",i,"_")))/10000,
+                                           ),
+                                           #use old value
+                                           as.numeric(!!as.name(paste0("zvaluelasttime_",i,"_")))
+                                           #measured in 10k
+                                           ) %>%
+             replace_na(0)
+           )
+}
+# new property
+for (i in 1:11){
+  var_present_value = paste0("new_property_", i)
+  hh_house_2018 <- hh_house_2018 %>%
+    mutate({{var_present_value}} := ifelse(#whether has new value
+      !is.na(!!as.name(paste0("ha036_w4_",i,"_"))),
+      #has new value
+      coalesce(# concrete value
+        as.numeric(!!as.name(paste0("ha036_w4_1_",i,"_"))),
+        # unit value * area
+        as.numeric(!!as.name(paste0("ha036_w4_2_",i,"_")))*as.numeric(!!as.name(paste0("ha035_w4_",i,"_")))/10,
+        # unit value min/max * area
+        #average min/max
+        ((as.numeric(!!as.name(paste0("ha036_w4_",i,"__min"))) + as.numeric(!!as.name(paste0("ha036_w4_",i,"__max"))))/2)*
+          #size
+          as.numeric(!!as.name(paste0("ha035_w4_",i,"_")))/10000,
+      ),
+      #use old value
+      NA
+      #measured in 10k
+    ) %>%
       replace_na(0)
-  )
-hh_otherhome_2011 %>% head()
+    )
+}
 
+# sum rowwise columns
 
-## ----------------------------------------------------------------------------------------------------------------------------------
-hh_homevalue <-
-  hh_primaryhome_2015 %>%
-  full_join(hh_otherhome_2015, by = "hhid") %>%
-  full_join(hh_otherhome_2013, by = "hhid") %>%
-  full_join(hh_otherhome_2011, by = "hhid") %>%
-  mutate_at(c("otherhomevalue11",
-              "otherhomevalue13",
-              "otherhomevalue15"),
-            function(x) {
-              replace_na(x, 0)
-            }) %>%
-  transmute(
-    hhid = hhid,
-    asset_home = homevalue +
-      otherhomevalue11 +
-      otherhomevalue13 +
-      otherhomevalue15
-  )
-hh_homevalue %>% head()
-
+hh_house_2018 = hh_house_2018 %>%
+  mutate(asset_home = select(., old_property_1:new_property_11) %>% rowSums() * 10000 )
+hh_homevalue = hh_house_2018 %>%
+  select(hhid,
+         asset_home)
 
 ## ----------------------------------------------------------------------------------------------------------------------------------
 parent_hh <-
-  hh_fin_2015 %>%
-  full_join(hh_durable_fixed_2015, by = "hhid") %>%
+  hh_fin_2018 %>%
+  full_join(hh_durable_fixed_2018, by = "hhid") %>%
   full_join(hh_homevalue, by = "hhid") %>% 
-  mutate(asset_total = asset_home %>% replace_na(0) +
-           asset_fin +
-           asset_land +
-           asset_durable_fixed)
+  mutate(asset_total = asset_home%>%replace_na(0)  +
+           asset_fin%>%replace_na(0) +
+           asset_land%>%replace_na(0) +
+           asset_durable_fixed%>%replace_na(0))
 parent_hh %>% head()
 
 
@@ -863,236 +838,225 @@ parent %>% head()
 
 
 ## ----import child data, echo=FALSE, warning=FALSE----------------------------------------------------------------------------------
-child_raw_2015 <-
-  read.dta13("CHARLS2015/Child.dta",
+child_raw_2018 <-
+  read.dta13("CHARLS2018/Family_Information.dta",
              convert.factors = TRUE,
              generate.factors = TRUE)
 #Child data
-child_2015 <- child_raw_2015 %>% select(
-  id = ID,
+child_2018_wide <- child_raw_2018 %>% select(
   hhid = householdID,
-  childid = childID,
-  sex = gender,
-  age = age,
-  independence = cb053,
-  education = cb052_w3,
-  hukou = cb055,
-  hukou_prior = cb055_w2_1,
-  marriage = cb063,
-  party = cb063_w3_2,
-  numchildren = cb065,
-  income = cb069,
-  ownership = cb071_w3,
-  homevalue = cb072_w3,
-  urban = cb054
-) %>%
-  arrange(hhid, desc(age)) %>%
-  group_by(hhid) %>%
-  mutate(sibling_rank = row_number(),
-         siblings = n()) %>%
-  ungroup()
+  xchildgender_1_:xchildgender_16_,
+  xchildbirth_1_:xchildbirth_16_, 
+  #education
+  zchildedu_1_:zchildedu_14_,
+  cb052_w3_1_:cb052_w3_15_,
+  #independence
+  cb053_1_:cb053_15_,
+  #urban if independence = other
+  cb054_1_:cb054_14_,
+  #hukou
+  cb055_1_:cb055_15_,
+  #party
+  cb063_w3_2_1_:cb063_w3_2_15_,
+  #working or not
+  cb070_w4_1_:cb070_w4_15_,
+  #occupation
+  cb071_1_:cb071_15_,
+  #marriage
+  cb063_1_:cb063_15_,
+  #spouse education
+  cb091_w4_1_:cb091_w4_15_,
+  #spouse working or not
+  cb093_w4_1_:cb093_w4_15_,
+  #num of children
+  cb065_1_:cb065_15_,
+  #income
+  cb069_1_:cb069_15_,
+  #ownership
+  cb071_w3_1_:cb071_w3_15_,
+  #homevalue
+  cb072_w3_1_:cb072_w3_15_
+)
+#transform into child-id based
+var_child_prefix <- child_2018_wide %>%
+  names()%>%
+  setdiff("hhid")%>%
+  str_replace_all("[:digit:]+_$","")%>%
+  unique()
+child_2018_long <- select(child_2018_wide, hhid)
+for (prefix in var_child_prefix){
+  #output variable name
+  varname <- str_sub(prefix,1,-2)
+  #set of current variable names
+  vars_child <- c(paste0(prefix,c(1:16),"_"))
+  #make null columns if necessary
+  for (x in vars_child){
+    if(is.null(child_2018_wide[[x]])) {
+      child_2018_wide <- child_2018_wide%>%
+        mutate({{x}} := NA)
+    }
+  }
+  #transform data
+  child_data <- child_2018_wide %>% 
+    data.table::melt(id.vars = "hhid",
+         measure.vars = vars_child)%>%
+    transmute(hhid = hhid,
+              childid = str_extract(variable,"_[:digit:]+_$")%>%str_extract("[:digit:]+"),
+              {{varname}} := value)
+  if(prefix == var_child_prefix[1]){
+    key = "hhid"
+  } else {
+    key = c("hhid","childid")
+  }
+  child_2018_long <- left_join(child_2018_long, child_data, by = key)
+}
 
-child_2015 %>% head()
-
-
-## ----------------------------------------------------------------------------------------------------------------------------------
-child_2015 <-
-  child_2015 %>%
-  mutate(
-    numchildren = ifelse(marriage == "6 Never Married",
-                         0,
-                         numchildren),
-    marriage = marriage %>% fct_recode(
-      `2 Married` = "3 Separated",
-      `2 Married` = "4 Divorced",
-      `1 Never married` = "6 Never Married",
-      `1 Never married` = "7 Cohabitated",
-      `2 Married` = "1 Married With Spouse At Present",
-      `2 Married` = "2 Married But Not Living With Spouse Temporarily",
-      `2 Married` = "5 Widowed"
-    ),
-    party = party %>% fct_recode(`2 Not in ccp` = "2 No",
-                                 `1 In ccp` = "1 Yes"),
-    hukou = ifelse(
-      hukou == "3 Unified Residency Hukou",
-      hukou_prior %>% as.character(),
-      hukou %>% as.character()
-    ) %>%
-      recode(
-        `4 Does Not Have Hukou` = "1 Agricultural Hukou",
-        `3 Does Not Have Hukou` = "1 Agricultural Hukou"
-      ) %>%
-      as.factor(),
-    education_years = education %>%
-      as.numeric() %>%
-      recode(0, 3, 4, 6, 9, 12, 12, 15, 16, 18, 21), 
-    income = income %>%
-      as.numeric() %>%
-      recode(
-        0,
-        1000,
-        2500,
-        7500,
-        15000,
-        25000,
-        40000,
-        75000,
-        125000,
-        175000,
-        250000,
-        500000
-      ),
-    homevalue = ifelse(ownership == "2 No",
-                       0,
-                       homevalue %>% 
-                         pmin(1000) %>%
-                         pmax(0)) *10000
-  ) %>%
-  select(-hukou_prior,
-         -education)
-
-
-child_2015  %>% head()
-
+child_2018_long <- child_2018_long%>%
+  filter_at(str_sub(var_child_prefix,1,-2),any_vars(!is.na(.)))
 
 ## ----------------------------------------------------------------------------------------------------------------------------------
-spouse_long <-
-  demographic_raw_2014 %>%
+child_2018 <-
+  child_2018_long %>%
+  transmute(hhid = as.numeric(hhid),
+            childid = as.numeric(childid),
+            sex = xchildgender%>%as.factor(),
+            age = 2018 - xchildbirth,
+            education_years = coalesce(cb052_w3,zchildedu)%>%
+              str_extract("[:digit:]+")%>%
+              as.numeric()%>%
+              recode(0, 3, 4, 6, 9, 12, 12, 15, 16, 18, 21)%>%
+              na_if(997)%>%
+              na_if(999),
+            independence = cb053%>%
+              na_if("997 Don't Know")%>%
+              na_if("999 Refuse to Answer")%>%
+              as.factor(),
+            urban = ifelse(cb053 %in% 
+                             c("1 Livng with Respondent",
+                               "2 Livng with Respondent but Financially Independent",
+                               "3 Living in the Same or Nearby Courtyard House(Apartment) with Respondent",
+                               "4 Another Household In Your Permanent Address's Village/Neighorhood"),
+                           "same as R",
+                           cb054%>%as.character()
+                           )%>%
+              na_if("997 Don't Know")%>%
+              na_if("999 Refuse to Answer")%>%
+              recode(`4 Special Area` = "1 Center Area of City or Town")%>%
+              as.factor(),
+            hukou = cb055 %>%
+            recode(
+              `3 Unified Residency Hukou` = "1 Agriculture Hukou",
+              `4 Do not Have Hukou` = "1 Agriculture Hukou"
+            ) %>%
+              na_if("997 Don't Know")%>%
+              na_if("999 Refuse to Answer")%>%
+              as.factor(),
+            party = cb063_w3_2%>%
+              na_if("997 Don't Know")%>%
+              na_if("999 Refuse to Answer")%>%
+              recode(`1 Yes` = "1 Non Party Member",
+                     `2 No` = "2 Party Member")%>%
+              as.factor(),
+            working = cb070_w4%>%
+              na_if("997 Don't Know")%>%
+              na_if("999 Refuse to Answer")%>%
+              as.factor(),
+            job = cb071%>%as.factor(),
+            married = cb063%>% recode(
+              `1 Married with Spouse Present` = "1 Married",
+              `2 Married but not Living with Spouse Temporarily for Reasons Such as Work` = "1 Married",
+              `3 Separated` = "1 Married",
+              `4 Divorced` = "2 Not Married",
+              `5 Widowed` = "2 Not Married",
+              `6 Never Married` = "2 Not Married") %>%
+              na_if("997 Don't Know")%>%
+              na_if("999 Refuse to Answer")%>%
+              as.factor(),
+            education_years_spouse = cb091_w4%>%
+              str_extract("[:digit:]+")%>%
+              as.numeric()%>%
+              recode(0, 3, 4, 6, 9, 12, 12, 15, 16, 18, 21)%>%
+              na_if(997)%>%
+              na_if(999),
+            job_spouse = cb093_w4%>%as.factor(),
+            numchildren = cb065,
+            income = cb069 %>%
+              str_extract("[:digit:]+")%>%
+              as.numeric()%>%
+              recode(
+                0,
+                1000,
+                2500,
+                7500,
+                15000,
+                25000,
+                40000,
+                75000,
+                125000,
+                175000,
+                250000,
+                500000
+              )%>%
+              na_if(997)%>%
+              na_if(999),
+            homevalue = (ifelse(cb072_w3>=500,cb072_w3/10000,ifelse(cb072_w3>1000,1000,cb072_w3)))
+            ) 
+
+## ----------------------------------------------------------------------------------------------------------------------------------
+transfer_raw_2018 <-
+  read.dta13("CHARLS2018/Family_Transfer.dta")
+#gift home upon marriage
+marriage_home <- transfer_raw_2018%>%
   select(hhid = householdID,
-         c036_1_:c036_18_,
-         c037a1_1_:c037a1_18_) %>% 
-  gather(column, value,-hhid,) %>%
-  mutate(childid = column %>%
-           str_extract("[[:punct:]][[:digit:]]+[[:punct:]]")%>%
-           str_extract("[[:digit:]]+") %>%
-           as.numeric()) %>%
-  group_by(hhid)
-
-spouse_education <-
-  spouse_long %>%
-  filter(column %>%
-           str_detect("c036"),
-         is.na(value)==FALSE) %>%
-  mutate(education_years_spouse =
-           value %>% 
-           str_extract("[[:digit:]]+") %>%
-           as.numeric() %>%
-           recode(0, 3, 4, 6, 9, 12, 12, 15, 16, 18, 21, NULL)
-         ) %>%
-  select(hhid,
-         childid,
-         education_years_spouse)
-
-spouse_education %>% head()
-
-
-## ----------------------------------------------------------------------------------------------------------------------------------
-spouse_hukou <-
-  spouse_long %>%
-  filter(column %>%
-           str_detect("c037"),
-         is.na(value) == FALSE) %>%
-  mutate(hukou_spouse =
-           value %>%
-           recode("3 Unified Residence Hukou" = "1 Agricultural Hukou")) %>%
-  select(hhid,
-         childid,
-         hukou_spouse)
-
-spouse_hukou %>% head()
-
-
-## ----Occupation--------------------------------------------------------------------------------------------------------------------
-child_raw_2013 <-
-  read.dta13("CHARLS2013/Child.dta",
-             convert.factors = TRUE,
-             generate.factors = TRUE)
-child_2013 <-
-  child_raw_2013 %>%
-  select(hhid = householdID,
-         childid = childID,
-         job = cb071)%>%
-  mutate(job = job %>% 
-           fct_rev()) 
-child_2013 %>% head()
-
-
-## ----------------------------------------------------------------------------------------------------------------------------------
-#buy marriage house
-transfer_raw_2015 <-
-  read.dta13("CHARLS2015/Family_Transfer.dta")
-transfer_2015 <- transfer_raw_2015 %>%
-  select(hhid = householdID,
-         ce069_w2_1_1_:ce069_w2_1_15_,
-         ce070_w2_1_1_:ce070_w2_1_9_)
-
-
-transfer_long <- transfer_2015 %>%
+         ce069_w2_1_1_:ce069_w2_1_15_) %>%
   gather(column, value, -hhid, ) %>%
   mutate(childid = column %>%
-           str_sub(12, 12) %>%
+           str_extract("_[:digit:]+_$")%>%
+           str_extract("[:digit:]+") %>%
            as.numeric()) %>%
-  group_by(hhid)
+  transmute(hhid = hhid %>% as.numeric(), 
+            childid = childid %>% as.numeric(),
+            marriagehome = value %>% 
+              recode(`1 Yes` = "2 Yes",
+                     `2 No` = "1 No") %>%
+              as.factor())
 
-marriagehome <-
-  transfer_long %>%
-  filter(column %>%
-           str_detect("ce069"),
-         is.na(value) == FALSE) %>%
-  mutate(marriagehome = value) %>%
-  select(hhid,
-         childid,
-         marriagehome
-         )
-
-marriagehomevalue <-
-  transfer_long %>%
-  filter(column %>%
-           str_detect("ce070"),
-         is.na(value) == FALSE) %>%
-  select(hhid,
-         childid,
-         marriagehomevalue = value) %>%
-  mutate(marriagehomevalue =
-           marriagehomevalue %>%
+#gift home value
+marriage_homevalue <- transfer_raw_2018%>%
+  select(hhid = householdID,
+         ce070_w2_1_1_:ce070_w2_1_9_) %>%
+  gather(column, value, -hhid, ) %>%
+  mutate(childid = column %>%
+           str_extract("_[:digit:]+_$")%>%
+           str_extract("[:digit:]+") %>%
            as.numeric()) %>%
-  mutate(
-    marriagehomevalue =
-      ifelse(
-        marriagehomevalue > 1000,
-        marriagehomevalue / 1000,
-        marriagehomevalue
-      )
-  )
-
-child_marriagehome <-
-  marriagehome %>%
-  left_join(marriagehomevalue,
-            by = c("hhid",
-                   "childid"))
-child_marriagehome$marriagehome <-
-  child_marriagehome$marriagehome %>% as.factor()
-
-child_marriagehome %>% head()
+  mutate(value = ifelse(
+    value > 1000,
+    value / 1000,
+    value
+  ))%>%
+  transmute(hhid = hhid %>% as.numeric(), 
+            childid = childid %>% as.numeric(),
+            marriagehomevalue = value)
 
 
 ## ----------------------------------------------------------------------------------------------------------------------------------
-child_ind <-
-  child_2015 %>%
-  left_join(spouse_education, by = c("hhid","childid")) %>%
-  left_join(spouse_hukou, by = c("hhid","childid")) %>%
-  left_join(child_2013, by = c("hhid","childid")) %>%
-  left_join(child_marriagehome, by = c("hhid","childid")) %>%
-  distinct()
+child <-
+  child_2018 %>%
+  left_join(marriage_home, by = c("hhid","childid")) %>%
+  left_join(marriage_homevalue, by = c("hhid","childid")) 
 
-child_ind %>% head()
+child %>% head()
 
 
 ## ----------------------------------------------------------------------------------------------------------------------------------
 #merge and resolve name conflict
 merged <-
-  child_ind %>%
-  left_join(parent, by = c("hhid")) %>%
+  child %>%
+  ungroup()%>%
+  left_join(parent %>% 
+              ungroup%>% 
+              mutate(hhid = hhid %>%as.numeric()), by = c("hhid")) %>%
   rename_at(vars(contains(".x")),
             function(child_var) {
               return(child_var %>%
@@ -1106,23 +1070,19 @@ merged <-
                        paste("_parent", sep = ""))
             }) %>%
   mutate(urban_child = 
-           ifelse(independence %in% 
-                    c("1 This Household, And Economicly Dependent",
-                      "2 This Household, But Economicly Independent",
-                      "3 The Same Or Adjacent Dwelling/Courtyard With You",
-                      "4 Another Household In Your Permanent Address's Village/Neighorhood"),
-                  urban_parent%>%as.character(),
-                  urban_child%>%as.character()
-                  ) %>% 
-           recode("2 Combination Zone Between Urban And Rural Areas" = "2 Combination Zone Between Urban and Rural Areas")%>% 
-           as.factor(),
-         hukou_spouse = hukou_spouse %>%
+           ifelse(urban_child == "same as R",
+                  urban_parent %>% as.character(),
+                  urban_child %>% as.character()
+                  ) %>%
+           recode(`1 Center Area of City or Town` = "1 Central of City/Town",
+                  `2 Urban-suburban-integration Area`= "2 Urban-Rural Integration Zone",
+                  `3 Rural Area`="3 Rural") %>%
            as.factor()
          ) %>%
-  mutate_at(c("id_child",
+  mutate_at(c("childid",
               "hhid",
-              "id_parent",
-              "cid"),
+              "cid",
+              "id"),
             as.numeric)
 
 merged %>% head()
