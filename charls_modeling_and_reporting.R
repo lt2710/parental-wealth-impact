@@ -1,10 +1,4 @@
----
-title: "CHARLS Modeling"
-author: "Langyi Tian"
-output: html_document
----      
-###Setup
-```{r setup}
+## ----setup----------------------------------------------------------------------------------------
 path_to_code<-rstudioapi::getActiveDocumentContext()$path
 main_directory<-strsplit(path_to_code,"/[a-zA-Z0-9_-]*.Rmd$")[[1]]
 setwd(main_directory)
@@ -22,9 +16,9 @@ knitr::opts_chunk$set(
   cache.lazy = FALSE
 )
 options(htmltools.dir.version = FALSE)
-```  
- 
-```{r packages, message = FALSE, warning = FALSE, echo=FALSE}
+
+
+## ----packages, message = FALSE, warning = FALSE, echo=FALSE---------------------------------------
 # Load packages.
 packages <- c(
   "knitr",
@@ -46,15 +40,14 @@ packages <- lapply(
   }
 )
 select <- dplyr::select
-```
 
-```{r filter and select final data,echo=TRUE, warning=FALSE}
+
+## ----filter and select final data,echo=TRUE, warning=FALSE----------------------------------------
 load("output/merged.RData")
 dta <- merged 
-```
 
-### make additional engineering to data
-```{r}
+
+## -------------------------------------------------------------------------------------------------
 dta_mutated <-
   dta %>%
   mutate(
@@ -89,10 +82,9 @@ dta_mutated <-
                                  1,
                                  0))
   )
-```
- 
-## Filter observations
-```{r}
+
+
+## -------------------------------------------------------------------------------------------------
 dta_mutated_filtered <-
   dta_mutated%>% filter(
     urban_child %in% c(
@@ -109,15 +101,14 @@ dta_mutated_filtered <-
     #age_child < 55,
     marriage == "2 Married"
   )
-```
 
-```{r}
+
+## -------------------------------------------------------------------------------------------------
 missing_table <- dta_mutated_filtered %>% missing_glimpse ()
 missing_table
-```
 
-## independence/not
-```{r}
+
+## -------------------------------------------------------------------------------------------------
 dta_independence <-
   dta_mutated_filtered %>%
   mutate(same_city = ifelse(independence %in% c("6 Other"),
@@ -128,10 +119,9 @@ dta_independence <-
                                                 `2 Public`="3 State Controlled Firm",
                                                 `2 Public`="4 Public institution",
                                                 `2 Public`="5 Government"))
-```
 
 
-```{r}
+## -------------------------------------------------------------------------------------------------
 var.summary <-
   c(
     #child,
@@ -181,10 +171,9 @@ table2 <-
 cbind(summary_table(dta_independence %>% select(one_of(var.summary))),
       table1,
       table2) 
-```
 
-#never married
-```{r}
+
+## -------------------------------------------------------------------------------------------------
 data_never_married <-
  dta_mutated %>% filter(
     urban_child %in% c(
@@ -201,9 +190,9 @@ table(data_never_married$sex_child,
 
 table(data_never_married$sex_child,
       data_never_married$ownership)%>%chisq.test()
-```
 
-```{r}
+
+## -------------------------------------------------------------------------------------------------
 string.u <-
   paste(
 ##control
@@ -250,10 +239,9 @@ export_summs(
   ,to.file = "xlsx",
   file.name = "output/1-never-married.xlsx"
 )
-```
 
-#housing wealth distribution by male/female 
-```{r}
+
+## -------------------------------------------------------------------------------------------------
 table(dta_independence$sex_child,
       dta_independence$ownership)
 
@@ -261,11 +249,9 @@ table(dta_independence$sex_child,
       dta_independence$ownership)%>%chisq.test()
 
 t.test(homevalue ~ sex_child, data = dta_independence%>%filter(homevalue>0))
-```
- 
 
-#relationship with parents
-```{r}
+
+## -------------------------------------------------------------------------------------------------
 cor(dta_independence$homevalue[dta_independence$sex_child == "1 Male"],
     dta_independence$asset_total[dta_independence$sex_child == "1 Male"],
     use = "complete.obs")
@@ -273,10 +259,9 @@ cor(dta_independence$homevalue[dta_independence$sex_child == "1 Male"],
 cor(dta_independence$homevalue[dta_independence$sex_child == "2 Female"],
     dta_independence$asset_total[dta_independence$sex_child == "2 Female"],
     use = "complete.obs")
-```
 
-#direct marriage transfer
-```{r}
+
+## -------------------------------------------------------------------------------------------------
 table(dta_independence$marriagehome,
       dta_independence$ownership) 
 
@@ -284,17 +269,17 @@ table(dta_independence$marriagehome,
       dta_independence$ownership) %>%chisq.test()
 
 t.test(homevalue ~ marriagehome, data = dta_independence%>%filter(homevalue>0))
-```
 
-```{r}
+
+## -------------------------------------------------------------------------------------------------
 table(dta_independence$marriagehome,
       dta_independence$sex_child)
 
 table(dta_independence$marriagehome,
       dta_independence$sex_child)%>%chisq.test()
-```
 
-```{r}
+
+## -------------------------------------------------------------------------------------------------
 string.a <-
   paste(
 ##control
@@ -338,10 +323,9 @@ export_summs(
   ,to.file = "xlsx",
   file.name = "output/2-married-gift-home.xlsx"
 )
-``` 
 
-#indirect transfer
-```{r}
+
+## -------------------------------------------------------------------------------------------------
 cor(dta_independence$homevalue[dta_independence$sex_child == "1 Male" &
                                  dta_independence$marriagehome == FALSE],
     dta_independence$asset_total[dta_independence$sex_child == "1 Male" &
@@ -353,9 +337,9 @@ cor(dta_independence$homevalue[dta_independence$sex_child == "2 Female" &
     dta_independence$asset_total[dta_independence$sex_child == "2 Female" &
                                    dta_independence$marriagehome == FALSE],
     use = "complete.obs")
-```
-  
-```{r}
+
+
+## -------------------------------------------------------------------------------------------------
 string.early <-
   paste(
 ##control
@@ -429,9 +413,9 @@ formula.independence.homevalue.early <-
 formula.independence.homevalue.late <-
   formula(paste("(homevalue_logged) ~",
                 string.late))
-```
 
-```{r}
+
+## -------------------------------------------------------------------------------------------------
 export_summs(
   glm(
     formula.independence.ownership.early,
@@ -457,10 +441,9 @@ export_summs(
   ,to.file = "xlsx",
   file.name = "output/3-married-ownership.xlsx"
 )
-```
 
 
-```{r}
+## -------------------------------------------------------------------------------------------------
 vglm(formula.independence.homevalue.early,
      tobit(Lower  = 1),
      data = dta_independence %>%filter(sex_child=="1 Male")) %>%
@@ -479,9 +462,9 @@ vglm(formula.independence.homevalue.late,
      tobit(Lower  = 1),
      data = dta_independence %>%filter(sex_child=="2 Female")) %>%
   summary()
-```
 
-```{r}
+
+## -------------------------------------------------------------------------------------------------
 export_summs(
   lm(
     formula.independence.homevalue.early,
@@ -510,4 +493,4 @@ export_summs(
   error_pos = "same",
   model.names = c("close", "other")
 )
-```
+
