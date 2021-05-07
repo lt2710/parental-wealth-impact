@@ -54,7 +54,7 @@ dta_mutated <-
     asset_fin = pmax(asset_fin, 0),
     asset_total = pmax(asset_total, 0),
     income_logged = log(income + 50),
-    ownership = (ownership=="1 Yes")%>%as.numeric(),
+    # ownership = (ownership=="1 Yes")%>%as.numeric(),
     marriagehome = (marriagehome %>%replace_na("2 No") == "1 Yes"),
     job_child_manager = (job_child %>% replace_na("5 Agricultural, Forestry, Husbandry and Fishery Producer") == "1 Manager") 
   ) %>%

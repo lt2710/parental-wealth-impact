@@ -14,7 +14,8 @@ packages <- c(
   "knitr",
   "bit64",
   "tidyverse",
-  "data.table"
+  "data.table",
+  "reshape2"
 )
 packages <- lapply(
   packages,
@@ -52,8 +53,10 @@ demographic_2018 <-
     new_urban = bb001_w3_2
   ) %>%
   #generate age at 2018
-  mutate(age = 2018 - birthyear) %>%
-  select(-birthyear) %>%
+  mutate(age = 2018 - birthyear,
+         male = sex == "1 Male") %>%
+  select(-birthyear,
+         - sex) %>%
   #generate accurate address
   mutate(
     urban = ifelse(
@@ -114,33 +117,22 @@ hukou_2018 <- demographic_raw_2018 %>%
       ),
       hukou_new %>% as.character()
     ),
-    hukou = hukou %>%
-      fct_recode(
-        `1 Agricultural Hukou` = "4 Do not have Hukou",
-        `1 Agricultural Hukou` = "4 Do Not Have Hukou",
-        `1 Agricultural Hukou` = "3 Unified Residence Hukou"
-      )
-  )%>%
+    urbanhukou = hukou == "2 Non-agricultural Hukou"
+  ) %>%
   select(id,
-         hukou)
+         urbanhukou)
 hukou_2018 %>% head()
 
 ## ----------------------------------------------------------------------------------------------------------------------------------
-#restrucutre party column
+# restrucutre party column
 party_2018 <- demographic_raw_2018 %>%
   select(id = ID,
          party = bg004_w4) %>%
-  mutate(party = party %>%
-           as.numeric () %>%
-           recode (2,1)%>%
-           factor(
-             levels = c(1, 2),
-             labels = c("1 Non Party Member","2 Party Member")
-           ))
+  mutate(party = party == "1 Yes")
 party_2018 %>% head()
 
 ## ----import education--------------------------------------------------------------------------------------------------------------
-#education 2018
+# education 2018
 education_raw_2018 <-
   read.dta13(
     "CHARLS2018/Demographic_Background.dta",
@@ -218,14 +210,20 @@ work_2014 <- work_raw_2014 %>%
   select(
     id = ID,
     hhid = householdID,
-    f_2_1_0_:f_2_1_18_,
     #Start year for job 1-18
-    f_3_0_:f_3_18_,
+    f_2_1_0_:f_2_1_18_,
     #Job category
-    f104_0_:f104_18_,
+    f_3_0_:f_3_18_,
     #Job category detailed
-    f105_0_:f105_14_,
+    f104_0_:f104_18_,
     #detail firm
+    f105_0_:f105_14_,
+    #rank at start
+    f110_0_:f110_15_,
+    #rank at middle
+    f110_a_1_:f110_a_8_,
+    #rank at end
+    f124_0_:f124_15_
   ) %>%
   left_join(residence_2014, by = "id")
 #transform into long format
@@ -271,6 +269,7 @@ work_merged <- full_join(work_2014,
                   by = "id") %>%
   mutate_if(is.factor,as.character)%>%
   mutate(job = NULL,
+         manager = NULL,
          column = column %>% replace_na("1"))
 #extract hukou status in the value
 for (i in 1:nrow(work_merged)) {
@@ -278,6 +277,7 @@ for (i in 1:nrow(work_merged)) {
   f_3_varname_ <- paste("f_3_", varname, "_", sep = "")
   f104_varname_ <- paste("f104_", varname, "_", sep = "")
   f105_varname_ <- paste("f105_", varname, "_", sep = "")
+  # job
   work_merged$job[i] <-
     ifelse(
       work_merged[[f_3_varname_]][i] %in% c("2 Agricultural Employment", "3 Non-agricultural Employment"),
@@ -286,10 +286,17 @@ for (i in 1:nrow(work_merged)) {
              work_merged[[f104_varname_]][i]),
       work_merged[[f_3_varname_]][i]
     )
+  # manager
+  f110_varname <- paste("f110_", varname, "_", sep = "")
+  f110_a_varname <- paste("f110_a_", varname, "_", sep = "")
+  f124_varname <- paste("f124_", varname, "_", sep = "")
+  work_merged$manager[i] <- coalesce(work_merged[[f124_varname]][i],
+                                 work_merged[[f110_varname]][i]
+                                 )
 }
 #keep relevant variables and recode job
 work_merged <- work_merged %>%
-  select(id, job) %>%
+  select(id, job, manager) %>%
   mutate(
     job = job %>%
       recode(
@@ -312,7 +319,7 @@ work_merged <- work_merged %>%
         `2 Public Institution` = "4 Public institution",
         `6 Army` = "4 Public institution",
         `1 Government` = "5 Government",
-        `5 Unpaid Household Business Help` = NULL
+        `5 Unpaid Household Business Help` = "2 Private"
       )%>%
       as.factor()
   )
@@ -324,135 +331,135 @@ psu <- read.dta13("CHARLS2013/PSU.dta",
                   fromEncoding = "GB2312",
                   convert.factors = FALSE)
 #city name missalinius
-psu$city[psu$city == "??????"] <- "?????????"
-psu$city[psu$city == "?????????"] <- "????????????"
-psu$city[psu$city == "??????"] <- "?????????"
+psu$city[psu$city=="北京"]<-"北京市"
+psu$city[psu$city=="哈尔滨"]<-"哈尔滨市"
+psu$city[psu$city=="天津市"]<-"天津市"
 #a new tier variable
 psu$tier <- NA
 psu$tier[psu$city %in% c(
-  "?????????",
-  "?????????",
-  "?????????",
-  "?????????",
-  "?????????",
-  "?????????",
-  "?????????",
-  "?????????",
-  "?????????",
-  "?????????",
-  "?????????",
-  "?????????",
-  "?????????",
-  "?????????",
-  "?????????",
-  "?????????",
-  "?????????",
-  "?????????",
-  "?????????"
+  "上海市",
+  "北京市",
+  "广州市",
+  "深圳市",
+  "重庆市",
+  "天津市",
+  "苏州市",
+  "成都市",
+  "武汉市",
+  "杭州市",
+  "南京市",
+  "西安市",
+  "长沙市",
+  "沈阳市",
+  "青岛市",
+  "郑州市",
+  "大连市",
+  "东莞市",
+  "宁波市"
 )] <- "1st tier"
 psu$tier[psu$city %in% c(
-  "?????????",
-  "?????????",
-  "?????????",
-  "?????????",
-  "?????????",
-  "????????????",
-  "?????????",
-  "?????????",
-  "?????????",
-  "?????????",
-  "????????????",
-  "?????????",
-  "?????????",
-  "?????????",
-  "?????????",
-  "?????????",
-  "?????????",
-  "?????????",
-  "?????????",
-  "?????????",
-  "?????????",
-  "?????????",
-  "?????????",
-  "?????????",
-  "?????????",
-  "???????????????",
-  "?????????",
-  "?????????",
-  "?????????",
-  "?????????"
+  "厦门市",
+  "福州市",
+  "无锡市",
+  "合肥市",
+  "昆明市",
+  "哈尔滨市",
+  "济南市",
+  "佛山市",
+  "长春市",
+  "温州市",
+  "石家庄市",
+  "南宁市",
+  "常州市",
+  "泉州市",
+  "南昌市",
+  "贵阳市",
+  "太原市",
+  "烟台市",
+  "嘉兴市",
+  "南通市",
+  "金华市",
+  "珠海市",
+  "惠州市",
+  "徐州市",
+  "海口市",
+  "乌鲁木齐市",
+  "绍兴市",
+  "中山市",
+  "台州市",
+  "兰州市"
 )] <- "2nd tier"
 psu$tier[psu$city %in% c(
-  "?????????",
-  "?????????",
-  "?????????",
-  "?????????",
-  "?????????",
-  "?????????",
-  "?????????",
-  "?????????",
-  "???????????????",
-  "?????????",
-  "?????????",
-  "?????????",
-  "?????????",
-  "?????????",
-  "?????????",
-  "?????????",
-  "?????????",
-  "?????????",
-  "?????????",
-  "?????????",
-  "?????????",
-  "?????????",
-  "?????????",
-  "?????????",
-  "?????????",
-  "?????????",
-  "?????????",
-  "?????????",
-  "?????????",
-  "?????????",
-  "?????????",
-  "?????????",
-  "????????????",
-  "?????????",
-  "?????????",
-  "?????????",
-  "?????????",
-  "?????????",
-  "?????????",
-  "?????????",
-  "?????????",
-  "????????????",
-  "?????????",
-  "?????????",
-  "?????????",
-  "????????????????????????",
-  "?????????",
-  "?????????",
-  "?????????",
-  "?????????",
-  "?????????",
-  "?????????",
-  "?????????",
-  "?????????",
-  "?????????",
-  "?????????",
-  "?????????",
-  "?????????",
-  "?????????",
-  "?????????",
-  "?????????",
-  "?????????",
-  "?????????",
-  "?????????",
-  "?????????",
-  "????????????",
-  "?????????",
-  "?????????",
-  "?????????",
-  "???????????????"
+  "潍坊市",
+  "保定市",
+  "镇江市",
+  "扬州市",
+  "桂林市",
+  "唐山市",
+  "三亚市",
+  "湖州市",
+  "呼和浩特市",
+  "廊坊市",
+  "洛阳市",
+  "威海市",
+  "盐城市",
+  "临沂市",
+  "江门市",
+  "汕头市",
+  "泰州市",
+  "漳州市",
+  "邯郸市",
+  "济宁市",
+  "芜湖市",
+  "淄博市",
+  "银川市",
+  "柳州市",
+  "绵阳市",
+  "湛江市",
+  "鞍山市",
+  "赣州市",
+  "大庆市",
+  "宜昌市",
+  "包头市",
+  "咸阳市",
+  "秦皇岛市",
+  "株洲市",
+  "莆田市",
+  "吉林市",
+  "淮安市",
+  "肇庆市",
+  "宁德市",
+  "衡阳市",
+  "南平市",
+  "连云港市",
+  "丹东市",
+  "丽江市",
+  "揭阳市",
+  "延边朝鲜族自治州",
+  "舟山市",
+  "九江市",
+  "龙岩市",
+  "沧州市",
+  "抚顺市",
+  "襄阳市",
+  "上饶市",
+  "营口市",
+  "三明市",
+  "蚌埠市",
+  "丽水市",
+  "岳阳市",
+  "清远市",
+  "荆州市",
+  "泰安市",
+  "衢州市",
+  "盘锦市",
+  "东营市",
+  "南阳市",
+  "马鞍山市",
+  "南充市",
+  "西宁市",
+  "孝感市",
+  "齐齐哈尔市"
 )] <- "3rd tier"
 psu$tier<-
   psu$tier%>%replace_na("4th tier")
@@ -480,8 +487,14 @@ parent_ind <-
 parent_ind_hh <-
   parent_ind %>% 
   group_by(hhid) %>%
-  arrange(sex) %>%
-  filter(row_number() == 1)
+  arrange(desc(male)) %>%
+  filter(row_number() == 1) %>%
+  ungroup() %>%
+  rename_at(vars(-id, -hhid,-cid,),
+            function(parent_ind_hh_var) {
+              return(parent_ind_hh_var %>%
+                       paste("_parent", sep = ""))
+            })
 
 parent_ind_hh %>% head()
 
@@ -832,7 +845,8 @@ parent_hh %>% head()
 
 ## ----------------------------------------------------------------------------------------------------------------------------------
 parent<- parent_ind_hh %>%
-  left_join(parent_hh, by ="hhid")
+  left_join(parent_hh, by ="hhid")%>%  
+  mutate(hhid = hhid %>%as.numeric())
 
 parent %>% head()
 
@@ -898,7 +912,7 @@ for (prefix in var_child_prefix){
   }
   #transform data
   child_data <- child_2018_wide %>% 
-    data.table::melt(id.vars = "hhid",
+    reshape2::melt(id.vars = "hhid",
          measure.vars = vars_child)%>%
     transmute(hhid = hhid,
               childid = str_extract(variable,"_[:digit:]+_$")%>%str_extract("[:digit:]+"),
@@ -919,7 +933,7 @@ child_2018 <-
   child_2018_long %>%
   transmute(hhid = as.numeric(hhid),
             childid = as.numeric(childid),
-            sex = xchildgender%>%as.factor(),
+            male = xchildgender == "1 Male",
             age = 2018 - xchildbirth,
             education_years = coalesce(cb052_w3,zchildedu)%>%
               str_extract("[:digit:]+")%>%
@@ -943,35 +957,14 @@ child_2018 <-
               na_if("999 Refuse to Answer")%>%
               recode(`4 Special Area` = "1 Center Area of City or Town")%>%
               as.factor(),
-            hukou = cb055 %>%
-            recode(
-              `3 Unified Residency Hukou` = "1 Agriculture Hukou",
-              `4 Do not Have Hukou` = "1 Agriculture Hukou"
-            ) %>%
-              na_if("997 Don't Know")%>%
-              na_if("999 Refuse to Answer")%>%
-              as.factor(),
-            party = cb063_w3_2%>%
-              na_if("997 Don't Know")%>%
-              na_if("999 Refuse to Answer")%>%
-              recode(`1 Yes` = "1 Non Party Member",
-                     `2 No` = "2 Party Member")%>%
-              as.factor(),
-            working = cb070_w4%>%
-              na_if("997 Don't Know")%>%
-              na_if("999 Refuse to Answer")%>%
-              as.factor(),
+            urbanhukou = cb055 == "2 Non-Agriculture Hukou",
+            party = cb063_w3_2 == "1 Yes",
+            working = cb070_w4 == "1 Working",
             job = cb071%>%as.factor(),
-            married = cb063%>% recode(
-              `1 Married with Spouse Present` = "1 Married",
-              `2 Married but not Living with Spouse Temporarily for Reasons Such as Work` = "1 Married",
-              `3 Separated` = "1 Married",
-              `4 Divorced` = "2 Not Married",
-              `5 Widowed` = "2 Not Married",
-              `6 Never Married` = "2 Not Married") %>%
-              na_if("997 Don't Know")%>%
-              na_if("999 Refuse to Answer")%>%
-              as.factor(),
+            married = cb063 %in% c(
+              "1 Married with Spouse Present",
+              "2 Married but not Living with Spouse Temporarily for Reasons Such as Work",
+              "3 Separated" = "1 Married"),
             education_years_spouse = cb091_w4%>%
               str_extract("[:digit:]+")%>%
               as.numeric()%>%
@@ -999,8 +992,9 @@ child_2018 <-
               )%>%
               na_if(997)%>%
               na_if(999),
+            ownership = cb071_w3 == "1 Yes",
             homevalue = (ifelse(cb072_w3>=500,cb072_w3/10000,ifelse(cb072_w3>1000,1000,cb072_w3)))
-            ) 
+            )
 
 ## ----------------------------------------------------------------------------------------------------------------------------------
 transfer_raw_2018 <-
@@ -1016,10 +1010,7 @@ marriage_home <- transfer_raw_2018%>%
            as.numeric()) %>%
   transmute(hhid = hhid %>% as.numeric(), 
             childid = childid %>% as.numeric(),
-            marriagehome = value %>% 
-              recode(`1 Yes` = "2 Yes",
-                     `2 No` = "1 No") %>%
-              as.factor())
+            marriagehome = value == "1 Yes")
 
 #gift home value
 marriage_homevalue <- transfer_raw_2018%>%
@@ -1051,28 +1042,14 @@ child %>% head()
 
 ## ----------------------------------------------------------------------------------------------------------------------------------
 #merge and resolve name conflict
-merged <-
+charls_merged <-
   child %>%
   ungroup()%>%
-  left_join(parent %>% 
-              ungroup%>% 
-              mutate(hhid = hhid %>%as.numeric()), by = c("hhid")) %>%
-  rename_at(vars(contains(".x")),
-            function(child_var) {
-              return(child_var %>%
-                       str_sub(end = -3) %>%
-                       paste("_child", sep = ""))
-            }) %>%
-  rename_at(vars(contains(".y")),
-            function(parent_var) {
-              return(parent_var %>%
-                       str_sub(end = -3) %>%
-                       paste("_parent", sep = ""))
-            }) %>%
-  mutate(urban_child = 
-           ifelse(urban_child == "same as R",
+  left_join(parent, by = c("hhid")) %>%
+  mutate(urban = 
+           ifelse(urban == "same as R",
                   urban_parent %>% as.character(),
-                  urban_child %>% as.character()
+                  urban %>% as.character()
                   ) %>%
            recode(`1 Center Area of City or Town` = "1 Central of City/Town",
                   `2 Urban-suburban-integration Area`= "2 Urban-Rural Integration Zone",
@@ -1085,13 +1062,13 @@ merged <-
               "id"),
             as.numeric)
 
-merged %>% head()
+charls_merged %>% head()
 
 
 ## ----------------------------------------------------------------------------------------------------------------------------------
-summary(merged)
+summary(charls_merged)
 
 
 ## ----------------------------------------------------------------------------------------------------------------------------------
-save(merged, file = "output/merged.RData")
+save(charls_merged, file = "output/charls_merged.RData")
 
