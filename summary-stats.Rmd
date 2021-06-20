@@ -1,0 +1,19 @@
+---
+title: "Summary Stats Rmd"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r fyrst}
+options(qwraps2_markup = "markdown") 
+cbind(qwraps2::summary_table(fyrst_married))%>%print()
+```
+
+```{r charls}
+options(qwraps2_markup = "markdown") 
+cbind(qwraps2::summary_table(charls_married %>%filter(male==TRUE)))%>%print()
+```
+

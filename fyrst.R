@@ -1,17 +1,20 @@
-## ----setup-------------------------------------------------------------------------------------------------------------------------
-#set working directory
+# setup-------------------------------------------------------------------------------------------------------------------------
+# run fyrst_key_coding.txt first
+# set working directory
 path_to_code <- rstudioapi::getActiveDocumentContext()$path
 main_directory <- strsplit(path_to_code, "/[a-zA-Z0-9_-]*.R$")[[1]]
 setwd(main_directory)
 
-## ----packages, message = FALSE-----------------------------------------------------------------------------------------------------
-# Load packages.
+# packages-----------------------------------------------------------------------------------------------------
+# load packages.
 packages <- c(
   "haven",
   "tidyverse",
-  "data.table",
+  "data.table", 
+  # for cross tab
+  "gtsummary",
+  # for regression output summary
   "VGAM",
-  # below is for output summary
   "jtools",
   "huxtable",
   "officer",
@@ -29,9 +32,9 @@ packages <- lapply(
 )
 select <- dplyr::select
 
-############################### read in data ###################################
-path = file.path("FYRST/61896_2013fyrst.sav")
-fyrst_raw = read_sav(path, encoding = "UTF-8")
+# read in data -----------------------------
+fyrst_path = file.path("FYRST/61896_2013fyrst.sav")
+fyrst_raw = read_sav(fyrst_path, encoding = "UTF-8")
 # remove abnormal strings in data 
 for (i in names(fyrst_raw)) {
   fyrst_raw[[i]] = fyrst_raw[[i]] %>%
@@ -40,16 +43,16 @@ for (i in names(fyrst_raw)) {
     na_if("")
 }
 
-############################### feature engineering ##############################
+# data preparation ----------------------------------
 # select necessary variables
 fyrst = fyrst_raw %>%
   transmute(
     # respondent
-    pid = pid,
-    male = a1 == 1,
-    age = 2013 - as.numeric(a2_y),
-    party = a4a == 1,
-    urbanhukou = recode(a6, `3` = "1", `4` = "1") == 2,
+    pid = as.numeric(pid),
+    male_res = a1 == 1,
+    age_res = 2013 - as.numeric(a2_y),
+    party_res = a4a == 1,
+    urbanhukou_res = recode(a6, `3` = "1", `4` = "1") == 2,
     # respondent father
     education_years_res_father = b404 %>%
       as.numeric() %>%
@@ -72,7 +75,7 @@ fyrst = fyrst_raw %>%
         `16` = 22,
         `17` = 16
       ),
-    hukou_res_father = b405 == "2",
+    urbanhukou_res_father = b405 == "2",
     party_res_father = b407 == "1",
     job_res_father = ifelse(b408 == 3,
                         ifelse(
@@ -91,10 +94,33 @@ fyrst = fyrst_raw %>%
                                 b411 > 1,
                                 FALSE), 
     # mother
-    education_years_res_mother = b504 %>%
+    # education_years_res_mother = b504 %>%
+    #   as.numeric() %>%
+    #   recode(
+    #     `1` = 0,
+    #     `2` = 6,
+    #     `3` = 9,
+    #     `4` = 11,
+    #     `5` = 12,
+    #     `6` = 12,
+    #     `7` = 12,
+    #     `8` = 15,
+    #     `9` = 15,
+    #     `10` = 16,
+    #     `11` = 16,
+    #     `12` = 19,
+    #     `13` = 19,
+    #     `14` = 22,
+    #     `15` = 22,
+    #     `16` = 16
+    #   ),
+    # hukou_res_mother = b505 == "2",
+    # party_res_mother = b507 == "1",
+    # respondent cont'd
+    education_years_res = c1 %>%
       as.numeric() %>%
       recode(
-        `1` = 0,
+        `1` = 0, 
         `2` = 6,
         `3` = 9,
         `4` = 11,
@@ -111,31 +137,7 @@ fyrst = fyrst_raw %>%
         `15` = 22,
         `16` = 16
       ),
-    hukou_res_mother = b505 == "2",
-    party_res_mother = b507 == "1",
-    # respondent cont'd
-    education_years = b504 %>%
-      as.numeric() %>%
-      recode(
-        `1` = 0,
-        `2` = 3,
-        `3` = 6,
-        `4` = 9,
-        `5` = 11,
-        `6` = 12,
-        `7` = 12,
-        `8` = 12,
-        `9` = 15,
-        `10` = 15,
-        `11` = 16,
-        `12` = 16,
-        `13` = 19,
-        `14` = 19,
-        `15` = 22,
-        `16` = 22,
-        `17` = 16
-      ),
-    job = ifelse(d2 == 3,
+    job_res = ifelse(d2 == 3,
                  ifelse(
                    d12 %in% c("1", "2", "3", "4", "5", "7"),
                    "Public",
@@ -148,14 +150,15 @@ fyrst = fyrst_raw %>%
                    )
                  ),
                  "Private"), 
-    manager = ifelse(d2 == 3,
+    manager_res = ifelse(d2 == 3,
                      d8>1,
-                     FALSE), 
-    income = as.numeric(d21),
-    married = e1 == "3",
+                     FALSE),
+    married_res = e1 == "3", 
     # spouse 
-    party_spouse = e12a == "1",
-    education_years_spouse = e1303 %>%
+    age_sps = 2013 - as.numeric(e9_y),
+    urbanhukou_sps = recode(e10, `3` = "1", `4` = "1") == 2,
+    party_sps = e12a == "1",
+    education_years_sps = e1303 %>%
       as.numeric() %>%
       recode(
         `1` = 0,
@@ -176,7 +179,7 @@ fyrst = fyrst_raw %>%
         `16` = 22,
         `17` = 16
       ),
-    job_spouse = ifelse(e1404 == 3,
+    job_sps = ifelse(e1404 == 3,
                  ifelse(
                    e1406 %in% c("1", "2", "3", "4", "5", "7"),
                    "Public",
@@ -189,7 +192,7 @@ fyrst = fyrst_raw %>%
                    )
                  ),
                  "Private"), 
-    manager_spouse = ifelse(e1404 == 3,
+    manager_sps = ifelse(e1404 == 3,
                      e1408>1,
                      FALSE), 
     # spouse father 
@@ -214,7 +217,7 @@ fyrst = fyrst_raw %>%
         `16` = 22,
         `17` = 16
       ),
-    hukou_sps_father = e1701 == "2",
+    urbanhukou_sps_father = e1701 == "2",
     party_sps_father = e1704 == "1",
     job_sps_father = ifelse(e1705 == 3,
                             ifelse(
@@ -232,202 +235,162 @@ fyrst = fyrst_raw %>%
     manager_sps_father = ifelse(e1705 == 3,
                                 e1709>1,
                                 FALSE),
-    # spouse mother 
-    education_years_sps_mother = e1803 %>%
-      as.numeric() %>%
-      recode(
-        `1` = 0,
-        `2` = 3,
-        `3` = 6,
-        `4` = 9,
-        `5` = 11,
-        `6` = 12,
-        `7` = 12,
-        `8` = 12,
-        `9` = 15,
-        `10` = 15,
-        `11` = 16,
-        `12` = 16,
-        `13` = 19,
-        `14` = 19,
-        `15` = 22,
-        `16` = 22,
-        `17` = 16
-      ),
-    hukou_sps_mother = e1801 == "2",
-    party_sps_mother = e1804 == "1",
+    # # spouse mother 
+    # education_years_sps_mother = e1803 %>%
+    #   as.numeric() %>%
+    #   recode(
+    #     `1` = 0,
+    #     `2` = 3,
+    #     `3` = 6,
+    #     `4` = 9,
+    #     `5` = 11,
+    #     `6` = 12,
+    #     `7` = 12,
+    #     `8` = 12,
+    #     `9` = 15,
+    #     `10` = 15,
+    #     `11` = 16,
+    #     `12` = 16,
+    #     `13` = 19,
+    #     `14` = 19,
+    #     `15` = 22,
+    #     `16` = 22,
+    #     `17` = 16
+    #   ),
+    # hukou_sps_mother = e1801 == "2",
+    # party_sps_mother = e1804 == "1",
     # household
     hh_income = as.numeric(k2),
     hh_income_logged = log(hh_income+1),
-    ownership = k11%in%c("3"),
+    ownership_vehicle = k5 == 1,
+    areabuild = as.numeric(k1001),
+    ownership =  k11%in%c("1","2","3","4"),
+    year_obtained_before_marriage = as.numeric(e7_y) - as.numeric(k1401),
     homevalue = ifelse(as.numeric(k16)>1000,
                               as.numeric(k16)/10000,
                               as.numeric(k16)),
-    homevalue_logged = log(homevalue+1),
-    ownership_res_parent = k21 == "1",
-    ownership_sps_parent = k22 == "1"
+    secondhome = (as.numeric(k2001) + as.numeric(ownership)) >= 2,
+    homevalue_other = ifelse(as.numeric(k2002)>1000,
+                             as.numeric(k2002)/10000,
+                             as.numeric(k2002)),
+    homevalue_total = homevalue + homevalue_other,
+    homevalue_total_logged = log(homevalue_total+1),
+    # called father but actually parent
+    ownership_res_father = k21 == "2",
+    ownership_sps_father = k22 == "2"
   )
+
+# key school education
+fyrst_edu = 
+  fyrst_raw %>%
+  select(pid,
+         c4a1:c4a10,
+         c4g1:c4g10) %>%
+  mutate(pid = as.numeric(pid),
+         key_seq = "")
+for (i in 1:10){
+  var_diploma = paste0("c4a", i)
+  var_key = paste0("c4g", i)
+  fyrst_edu = fyrst_edu %>%
+    mutate({{var_diploma}} := ifelse(!!as.name(var_diploma) %in% list_pm_diploma, "pm", 
+                                     ifelse(!!as.name(var_diploma) %in% list_md_diploma, "md", 
+                                            ifelse(!!as.name(var_diploma) %in% list_hi_diploma, "hi",
+                                                   ifelse(!!as.name(var_diploma) %in% list_clg_diploma, "clg",
+                                                          NA
+                                                          )
+                                                    )
+                                            )
+                                     ) %>% replace_na(""),
+    {{var_key}} := ifelse(!!as.name(var_diploma) %in% c("pm","md","hi"),
+                          !!as.name(var_key) %in% list_key_cpsr,
+                          !!as.name(var_key) %in% list_key_high
+                          ) %>% replace_na(""),
+    key_seq = str_c(key_seq,",",as.character(!!as.name(var_diploma)),"-",as.character(!!as.name(var_key)))
+    )
+}
+fyrst_edu = 
+  fyrst_edu %>%
+  mutate(pid = as.numeric(pid),
+         key_pm_res = ifelse(str_detect(key_seq,"pm-TRUE"), TRUE,
+                        ifelse(str_detect(key_seq,"pm-FALSE"), FALSE,
+                               NA)
+                        ),
+         key_md_res = ifelse(str_detect(key_seq,"md-TRUE"), TRUE,
+                        ifelse(str_detect(key_seq,"md-FALSE"), FALSE,
+                               ifelse(str_detect(key_seq,"pm"), "dropout", NA)
+                               )
+         ),
+         key_hi_res = ifelse(str_detect(key_seq,"hi-TRUE"), TRUE,
+                        ifelse(str_detect(key_seq,"hi-FALSE"), FALSE,
+                               ifelse(str_detect(key_seq,"md"), "dropout", NA)
+                               )
+         ),
+         key_clg_res = ifelse(str_detect(key_seq,"clg-TRUE"), TRUE,
+                        ifelse(str_detect(key_seq,"clg-FALSE"), FALSE,
+                               ifelse(str_detect(key_seq,"hi"), "dropout", NA)
+                               )
+         )
+         ) %>%
+  select(pid,
+         key_pm_res,
+         key_md_res,
+         key_hi_res,
+         key_clg_res)
+fyrst <- left_join(fyrst, fyrst_edu, on = "pid")
+
+# some additional variables for husband/wife matching ------------------------------------ 
+
+for (var in c("age","education_years","urbanhukou","party","job","manager","ownership")){
+  if (var!= "ownership"){
+    varname_husb = paste0(var,"_husb")
+    fyrst[[varname_husb]] = NA
+    varname_wife = paste0(var,"_wife")
+    fyrst[[varname_wife]] = NA
+  }
+  if (var!= "age"){
+    varname_husb_father = paste0(var,"_husb_father")
+    fyrst[[varname_husb_father]] = NA
+    varname_wife_father = paste0(var,"_wife_father")
+    fyrst[[varname_wife_father]] = NA
+  }
+  for (i in 1:nrow(fyrst)){
+    if (var!= "ownership"){
+      fyrst[[varname_husb]][i] = ifelse(fyrst[["male_res"]][i] == TRUE, 
+                                        fyrst[[paste0(var,"_res")]][i],
+                                        fyrst[[paste0(var,"_sps")]][i])
+      fyrst[[varname_wife]][i] = ifelse(fyrst[["male_res"]][i] == TRUE, 
+                                        fyrst[[paste0(var,"_sps")]][i],
+                                        fyrst[[paste0(var,"_res")]][i])
+    }
+    if (var!= "age"){
+      fyrst[[varname_husb_father]][i] = ifelse(fyrst[["male_res"]][i] == TRUE, 
+                                               fyrst[[paste0(var,"_res_father")]][i],
+                                               fyrst[[paste0(var,"_sps_father")]][i])
+      fyrst[[varname_wife_father]][i] = ifelse(fyrst[["male_res"]][i] == TRUE, 
+                                               fyrst[[paste0(var,"_sps_father")]][i],
+                                               fyrst[[paste0(var,"_sps_father")]][i])
+    }
+  }
+}
 
 # sort variable names
-other_col = c(
+main_col = c(
+  "pid",
+  names(fyrst)[str_detect(names(fyrst),"res")],
+  "married_res",
   names(fyrst)[str_detect(names(fyrst),"res_father")],
-  names(fyrst)[str_detect(names(fyrst),"res_mother")],
-  names(fyrst)[str_detect(names(fyrst),"res_parent")],
-  "married",
-  names(fyrst)[str_detect(names(fyrst),"spouse")],
+  names(fyrst)[str_detect(names(fyrst),"sps")],
   names(fyrst)[str_detect(names(fyrst),"sps_father")],
-  names(fyrst)[str_detect(names(fyrst),"sps_mother")],
-  names(fyrst)[str_detect(names(fyrst),"sps_parent")]
+  names(fyrst)[str_detect(names(fyrst),"husb")],
+  names(fyrst)[str_detect(names(fyrst),"husb_father")],
+  names(fyrst)[str_detect(names(fyrst),"wife")],
+  names(fyrst)[str_detect(names(fyrst),"husb_father")]
 )
-respondent_col = setdiff(names(fyrst),other_col)
+other_col = setdiff(names(fyrst),main_col)
 fyrst = fyrst %>%
-  select(all_of(respondent_col), all_of(other_col))
+  select(all_of(main_col), all_of(other_col))
 
-# model ownership
-fyrst = fyrst %>%
-  filter(age >= 25,
-         married == TRUE)
-
-####################################### education #################################
-varlist <-
-  paste(
-    # child
-    "age"
-    # parent
-    ,"hukou_res_father"
-    ,"party_res_father"
-    ,"education_years_res_father"
-    ,"job_res_father"
-    ,"ownership_res_parent"
-    ,sep = " + "
-  )
-
-formula <-
-  formula(paste("education_years ~",
-                varlist))
-
-jtools::export_summs(
-  lm(
-    formula,
-    data = fyrst %>% filter(male == TRUE)
-  ),
-  lm(formula,
-     data = fyrst %>% filter(male == FALSE)
-  ),
-  error_pos = "same",
-  model.names = c("Husband","Wife"),
-  to.file = "xlsx",
-  file.name = file.path("tables",paste0("fyrst - ",paste0(as.character(formula)[-1],collapse = " ~ "),".xlsx"))
-)
- 
-####################################### income ############################
-varlist <-
-  paste(
-    # child
-    "age"
-    ,"education_years"
-    ,"urbanhukou"
-    ,"party"
-    # spouse
-    , "education_years_spouse"
-    # parent
-    ,"education_years_res_father"
-    ,"job_res_father"
-    ,"ownership_res_parent"
-    ,sep = " + "
-  )
-
-formula <-
-  formula(paste("hh_income_logged ~",
-                varlist))
-
-jtools::export_summs(
-  lm(
-    formula,
-    data = fyrst %>% filter(male == TRUE)
-  ),
-  lm(
-    formula,
-    data = fyrst %>% filter(male == FALSE)
-  ),
-  error_pos = "same",
-  model.names = c("Husband","Wife"),
-  to.file = "xlsx",
-  file.name = file.path("tables",paste0("fyrst - ",paste0(as.character(formula)[-1],collapse = " ~ "),".xlsx"))
-)
-
-####################################### ownership ############################
-varlist <-
-  paste(
-    # child
-    "age"
-    ,"education_years"
-    ,"urbanhukou"
-    ,"party"
-    ,"hh_income_logged"
-    # spouse
-    , "education_years_spouse"
-    # parent
-    ,"education_years_res_father"
-    ,"job_res_father"
-    ,"ownership_res_parent"
-    ,sep = " + "
-  )
-
-formula <-
-  formula(paste("ownership ~",
-                varlist))
-
-jtools::export_summs(
-  glm(
-    formula,
-    data = fyrst %>% filter(male == TRUE),
-    family = "binomial"
-  ),
-  glm(
-    formula,
-    data = fyrst %>% filter(male == FALSE),
-    family = "binomial"
-  ),
-  error_pos = "same",
-  model.names = c("Husband","Wife"),
-  to.file = "xlsx",
-  file.name = file.path("tables",paste0("fyrst - ",paste0(as.character(formula)[-1],collapse = " ~ "),".xlsx"))
-)
-
-####################################### home value ############################
-varlist <-
-  paste(
-    # child
-    "age"
-    ,"education_years"
-    ,"urbanhukou"
-    ,"party"
-    ,"hh_income_logged"
-    # spouse
-    , "education_years_spouse"
-    # parent
-    ,"education_years_res_father"
-    ,"job_res_father"
-    ,"ownership_res_parent"
-    ,sep = " + "
-  )
-
-formula <-
-  formula(paste("homevalue_logged ~",
-                varlist))
-
-jtools::export_summs(
-  lm(
-    formula,
-    data = fyrst %>% filter(male == TRUE)
-  ),
-  lm(
-    formula,
-    data = fyrst %>% filter(male == FALSE)
-  ),
-  error_pos = "same",
-  model.names = c("Husband","Wife"),
-  to.file = "xlsx",
-  file.name = file.path("tables",paste0("fyrst - ",paste0(as.character(formula)[-1],collapse = " ~ "),".xlsx"))
-)
+save(fyrst, file = "output/fyrst.RData")
+# filter married
+load("output/fyrst.RData")
+fyrst_married = fyrst %>% filter(married_res == TRUE)
