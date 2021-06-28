@@ -1,0 +1,40 @@
+"","**Characteristic**","**N = 6,511**","**Characteristic**","**N = 2,618**"
+"1","age",NA,"age",NA
+"2","Mean (SD)","36 (8)","Mean (SD)","38 (7)"
+"3","Minimum,Median,Maximum","23,35,50","Minimum,Median,Maximum","23,38,50"
+"4","male","3,413 (52%)","male","2,618 (100%)"
+"5","married","5,117 (79%)","married","2,618 (100%)"
+"6","education_years",NA,"education_years",NA
+"7","Mean (SD)","11.0 (4.2)","Mean (SD)","10.9 (4.0)"
+"8","Minimum,Median,Maximum","0.0,12.0,22.0","Minimum,Median,Maximum","0.0,9.0,22.0"
+"9","urbanhukou","2,513 (39%)","urbanhukou","1,012 (39%)"
+"10","party","801 (12%)","party","449 (17%)"
+"11","job_public","391 (6.0%)","job_public","209 (8.0%)"
+"12","income",NA,"income",NA
+"13","Mean (SD)","65,983 (71,596)","Mean (SD)","71,375 (75,021)"
+"14","Minimum,Median,Maximum","0,40,000,500,000","Minimum,Median,Maximum","0,75,000,500,000"
+"15","income_logged",NA,"income_logged",NA
+"16","Mean (SD)","10.50 (1.60)","Mean (SD)","10.71 (1.27)"
+"17","Minimum,Median,Maximum","3.91,10.60,13.12","Minimum,Median,Maximum","3.91,11.23,13.12"
+"18","ownership","3,693 (57%)","ownership","1,730 (66%)"
+"19","homevalue",NA,"homevalue",NA
+"20","Mean (SD)","36 (68)","Mean (SD)","44 (77)"
+"21","Minimum,Median,Maximum","0,10,1,300","Minimum,Median,Maximum","0,20,980"
+"22","homevalue_logged",NA,"homevalue_logged",NA
+"23","Mean (SD)","2.10 (1.97)","Mean (SD)","2.47 (1.93)"
+"24","Minimum,Median,Maximum","0.00,2.40,7.17","Minimum,Median,Maximum","0.00,3.04,6.89"
+"25","urbanhukou_parent","2,072 (32%)","urbanhukou_parent","816 (31%)"
+"26","party_parent","1,140 (18%)","party_parent","524 (20%)"
+"27","education_years_parent",NA,"education_years_parent",NA
+"28","Mean (SD)","6.9 (4.1)","Mean (SD)","6.7 (4.1)"
+"29","Minimum,Median,Maximum","0.0,6.0,22.0","Minimum,Median,Maximum","0.0,6.0,19.0"
+"30","job_parent",NA,"job_parent",NA
+"31","1 Private","4,976 / 6,511 (76%)","1 Private","1,985 / 2,618 (76%)"
+"32","2 Public","1,535 / 6,511 (24%)","2 Public","633 / 2,618 (24%)"
+"33","asset_total",NA,"asset_total",NA
+"34","Mean (SD)","637,122 (1,897,247)","Mean (SD)","595,534 (1,219,138)"
+"35","Minimum,Median,Maximum","0,261,630,115,849,500","Minimum,Median,Maximum","60,238,850,25,231,500"
+"36","asset_total_logged",NA,"asset_total_logged",NA
+"37","Mean (SD)","12.25 (1.73)","Mean (SD)","12.18 (1.74)"
+"38","Minimum,Median,Maximum","0.00,12.47,18.57","Minimum,Median,Maximum","4.11,12.38,17.04"
+"39","marriagehome","663 (10%)","marriagehome","494 (19%)"

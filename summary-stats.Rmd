@@ -7,9 +7,29 @@ output: html_document
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-```{r fyrst}
+```{r}
+vars = 
+  c("age",
+    "male",
+    "education_years",
+    "urbanhukou",
+    "party",
+    "married",
+    "education_years_spouse",
+    "income",
+    "income_logged",
+    "ownership",
+    "homevalue",
+    "homevalue_logged",
+    "asset_total",
+    "asset_total_logged",
+    "asset_total_quant")
 options(qwraps2_markup = "markdown") 
-cbind(qwraps2::summary_table(fyrst_married))%>%print()
+cbind(
+  charls %>% select(all_of(vars)) %>% group_by(married, male) %>%　qwraps2::summary_table(),
+  charls %>% select(all_of(vars)) %>% qwraps2::summary_table()
+) %>%
+  as_tibble()
 ```
 
 ```{r charls}

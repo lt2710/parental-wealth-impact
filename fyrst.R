@@ -10,16 +10,7 @@ setwd(main_directory)
 packages <- c(
   "haven",
   "tidyverse",
-  "data.table", 
-  # for cross tab
-  "gtsummary",
-  # for regression output summary
-  "VGAM",
-  "jtools",
-  "huxtable",
-  "officer",
-  "flextable",
-  "openxlsx"
+  "data.table"
 )
 packages <- lapply(
   packages,
@@ -45,7 +36,7 @@ for (i in names(fyrst_raw)) {
 
 # data preparation ----------------------------------
 # select necessary variables
-fyrst = fyrst_raw %>%
+fyrst_raw_mutated = fyrst_raw %>%
   transmute(
     # respondent
     pid = as.numeric(pid),
@@ -266,9 +257,12 @@ fyrst = fyrst_raw %>%
     areabuild = as.numeric(k1001),
     ownership =  k11%in%c("1","2","3","4"),
     year_obtained_before_marriage = as.numeric(e7_y) - as.numeric(k1401),
-    homevalue = ifelse(as.numeric(k16)>1000,
+    homevalue = ifelse(ownership,
+                       ifelse(as.numeric(k16)>1000,
                               as.numeric(k16)/10000,
                               as.numeric(k16)),
+                       0),
+    homevalue_logged = log(homevalue+1),
     secondhome = (as.numeric(k2001) + as.numeric(ownership)) >= 2,
     homevalue_other = ifelse(as.numeric(k2002)>1000,
                              as.numeric(k2002)/10000,
@@ -310,33 +304,82 @@ for (i in 1:10){
 }
 fyrst_edu = 
   fyrst_edu %>%
-  mutate(pid = as.numeric(pid),
-         key_pm_res = ifelse(str_detect(key_seq,"pm-TRUE"), TRUE,
-                        ifelse(str_detect(key_seq,"pm-FALSE"), FALSE,
-                               NA)
-                        ),
-         key_md_res = ifelse(str_detect(key_seq,"md-TRUE"), TRUE,
-                        ifelse(str_detect(key_seq,"md-FALSE"), FALSE,
-                               ifelse(str_detect(key_seq,"pm"), "dropout", NA)
-                               )
-         ),
-         key_hi_res = ifelse(str_detect(key_seq,"hi-TRUE"), TRUE,
-                        ifelse(str_detect(key_seq,"hi-FALSE"), FALSE,
-                               ifelse(str_detect(key_seq,"md"), "dropout", NA)
-                               )
-         ),
-         key_clg_res = ifelse(str_detect(key_seq,"clg-TRUE"), TRUE,
-                        ifelse(str_detect(key_seq,"clg-FALSE"), FALSE,
-                               ifelse(str_detect(key_seq,"hi"), "dropout", NA)
-                               )
-         )
-         ) %>%
+  mutate(
+    pid = as.numeric(pid),
+    key_pm_res = ifelse(
+      str_detect(key_seq, "pm-TRUE"),
+      TRUE,
+      ifelse(str_detect(key_seq, "pm-FALSE"), FALSE,
+             NA)
+    ),
+    key_md_res = ifelse(
+      str_detect(key_seq, "md-TRUE"),
+      TRUE,
+      ifelse(str_detect(key_seq, "md-FALSE"), FALSE, NA)
+    ),
+    key_hi_res = ifelse(
+      str_detect(key_seq, "hi-TRUE"),
+      TRUE,
+      ifelse(str_detect(key_seq, "hi-FALSE"), FALSE, NA)
+    ),
+    key_clg_res = ifelse(
+      str_detect(key_seq, "clg-TRUE"),
+      TRUE,
+      ifelse(str_detect(key_seq, "clg-FALSE"), FALSE, NA)
+    )
+  ) %>% 
   select(pid,
          key_pm_res,
          key_md_res,
          key_hi_res,
          key_clg_res)
-fyrst <- left_join(fyrst, fyrst_edu, on = "pid")
+
+fyrst_to_impute <-
+  left_join(fyrst_raw_mutated, fyrst_edu, on = "pid") %>%
+  mutate(
+    key_pm_res = ifelse(!is.na(key_pm_res),
+                        key_pm_res,
+                        ifelse(is.na(key_pm_res) &
+                                 education_years_res < 6,
+                               "dropout",
+                               NA)) %>% as.factor(), 
+    key_md_res = ifelse(!is.na(key_md_res),
+                        key_md_res,
+                        ifelse(is.na(key_md_res) &
+                                 education_years_res <= 6,
+                               "dropout",
+                               NA)) %>% as.factor(), 
+    key_hi_res = ifelse(!is.na(key_hi_res),
+                        key_hi_res,
+                        ifelse(is.na(key_hi_res) &
+                                 education_years_res <= 9,
+                               "dropout",
+                               ifelse(education_years_res == 11,
+                                      "FALSE",
+                                      NA))) %>% as.factor(),
+    key_clg_res = ifelse(!is.na(key_clg_res),
+                         key_clg_res,
+                         ifelse(is.na(key_clg_res) &
+                                  education_years_res <= 12,
+                                "dropout",
+                                NA)) %>% as.factor()
+  )
+
+# perform imputation
+fyrst_object = fyrst_to_impute %>%
+  mice::mice(
+    m = 5,
+    method = "rf",
+    maxit = 5,
+    seed = 999
+  )
+fyrst = fyrst_object %>%
+  mice::complete(action = 1) %>%
+  mutate_at(c("key_pm_res",
+              "key_md_res",
+              "key_hi_res",
+              "key_clg_res"),
+            ~na_if(.,"dropout")%>%as.logical())
 
 # some additional variables for husband/wife matching ------------------------------------ 
 
@@ -391,6 +434,3 @@ fyrst = fyrst %>%
   select(all_of(main_col), all_of(other_col))
 
 save(fyrst, file = "output/fyrst.RData")
-# filter married
-load("output/fyrst.RData")
-fyrst_married = fyrst %>% filter(married_res == TRUE)

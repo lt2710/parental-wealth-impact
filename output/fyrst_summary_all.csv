@@ -1,0 +1,44 @@
+"","**Characteristic**","**N = 2,357**"
+"1","age_res",NA
+"2","Mean (SD)","28.31 (3.68)"
+"3","Minimum,Median,Maximum","0.00,28.00,39.00"
+"4","male_res","1,113 (47%)"
+"5","married_res","1,265 (54%)"
+"6","education_years_res",NA
+"7","Mean (SD)","15.13 (3.09)"
+"8","Minimum,Median,Maximum","0.00,16.00,22.00"
+"9","urbanhukou_res","1,689 (72%)"
+"10","party_res","257 (11%)"
+"11","job_res",NA
+"12","Private","1,692 / 2,310 (73%)"
+"13","Public","618 / 2,310 (27%)"
+"14","hh_income",NA
+"15","Mean (SD)","115,244 (137,241)"
+"16","Minimum,Median,Maximum","0,100,000,3,000,000"
+"17","hh_income_logged",NA
+"18","Mean (SD)","11.08 (1.75)"
+"19","Minimum,Median,Maximum","0.00,11.51,14.91"
+"20","ownership","1,762 (75%)"
+"21","homevalue",NA
+"22","Mean (SD)","94 (110)"
+"23","Minimum,Median,Maximum","0,80,1,000"
+"24","homevalue_logged",NA
+"25","Mean (SD)","3.27 (2.19)"
+"26","Minimum,Median,Maximum","0.00,4.39,6.91"
+"27","secondhome","935 (40%)"
+"28","homevalue_total",NA
+"29","Mean (SD)","173 (503)"
+"30","Minimum,Median,Maximum","0,100,22,070"
+"31","homevalue_total_logged",NA
+"32","Mean (SD)","3.95 (2.09)"
+"33","Minimum,Median,Maximum","0.00,4.62,10.00"
+"34","ownership_vehicle","732 (31%)"
+"35","urbanhukou_res_father","1,318 (56%)"
+"36","party_res_father","359 (15%)"
+"37","education_years_res_father",NA
+"38","Mean (SD)","9.90 (3.04)"
+"39","Minimum,Median,Maximum","0.00,9.00,22.00"
+"40","job_res_father",NA
+"41","Private","1,409 / 2,305 (61%)"
+"42","Public","896 / 2,305 (39%)"
+"43","ownership_res_father","1,061 (45%)"
