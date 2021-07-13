@@ -57,7 +57,7 @@ ggplot(
   xlab("Education Level") +
   ylab("Average Household Income") +
   labs(color = "Degree from Key-Point Institution") +
-  theme_classic()e
+  theme_classic()
 
 # continuation rate
 # calculate dropout
