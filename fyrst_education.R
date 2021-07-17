@@ -2,6 +2,7 @@
 # make data
 plot_data = fyrst_mutated_filtered %>%
   mutate(
+    ownership_res_father = ownership_res_father %>% pmin(2) %>% as.character(),
     diploma_res = case_when(
       education_years_res %in% c(0:6) ~ "1 <= Primary",
       education_years_res %in% 9 ~ "3 Junior High",

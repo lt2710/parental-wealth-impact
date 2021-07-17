@@ -1,20 +1,30 @@
 fyrst_married = fyrst_mutated_filtered %>%
   filter(married_res == TRUE) 
-fyrst_married = fyrst_married %>%
+plot_data = fyrst_married %>%
   mutate(
+    ownership_husb_father = ownership_husb_father %>% pmin(2) %>% as.character(),
+    ownership_wife_father = ownership_wife_father %>% pmin(2) %>% as.character(),
     diploma_husb = case_when(
       education_years_husb %in% c(0:12) ~ "1 <= Senior High",
       education_years_husb %in% c(15:22) ~ "2 Tertiary & Above",
+    ),
+    diploma_husb_father = case_when(
+      education_years_husb_father %in% c(0:9) ~ "1 <= Junior High",
+      education_years_husb_father %in% c(11:22) ~ "2 Senior High & Above",
     ),
     diploma_wife = case_when(
       education_years_wife %in% c(0:12) ~ "1 <= Senior High",
       education_years_wife %in% c(15:22) ~ "2 Tertiary & Above",
     ),
+    diploma_wife_father = case_when(
+      education_years_wife_father %in% c(0:9) ~ "1 <= Junior High",
+      education_years_wife_father %in% c(11:22) ~ "2 Senior High & Above",
+    ),
     income_quant = cut(
       hh_income,
       breaks = quantile(
         fyrst_married$hh_income,
-        probs = seq(0, 1, 0.2),
+        probs = seq(0, 1, 0.25),
         na.rm = T
       )
     )
@@ -24,7 +34,7 @@ fyrst_married = fyrst_married %>%
                                        na.rm = T)
   )
 # ownership------------------------------------------------------------
-fyrst_married %>%
+plot_data %>%
   tbl_cross(row = "ownership_husb_father",
             col = "ownership",
             percent = "row",
@@ -34,17 +44,26 @@ fyrst_married %>%
   write.csv(file.path("output",paste0("fyrst_ownership.csv")))
 
 # marriage homogamy -----------------------------------------------------------
-fyrst_married %>%
+plot_data %>%
   tbl_cross(row = "diploma_husb",
             col = "diploma_wife",
             percent = "cell",
             missing = "ifany") %>%
   add_p()%>%
   as_tibble()%>%
-  write.csv(file.path("output",paste0("fyrst_homogamy.csv")))
+  write.csv(file.path("output",paste0("fyrst_homogamy_edu.csv")))
+
+plot_data %>%
+  tbl_cross(row = "diploma_husb_father",
+            col = "diploma_wife_father",
+            percent = "cell",
+            missing = "ifany") %>%
+  add_p()%>%
+  as_tibble()%>%
+  write.csv(file.path("output",paste0("fyrst_homogamy_edu_parent.csv")))
 
 select(
-  fyrst_married,
+  plot_data,
   ownership_husb_father,
   ownership_wife_father
 ) %>%
@@ -58,7 +77,7 @@ select(
 
 # home value ------------------------------------------------------------
 # make data
-plot_data = fyrst_married %>%
+plot_data_small = plot_data %>%
   filter(!is.na(homevalue)) %>%
   group_by(ownership_husb_father, income_quant) %>%
   summarise(num = n(),
@@ -69,16 +88,16 @@ ggplot(aes(x = income_quant,
            y = metric,
            group = ownership_husb_father,
            color = ownership_husb_father),
-       data = plot_data) +
+       data = plot_data_small) +
   geom_point() + 
   geom_line()  +
   xlab("Income Level") +
   ylab("Median Home Wealth") +
-  labs(color = "Parental Home Ownership") +
+  labs(color = "Number of Parental Homes") +
   theme_classic()
 
 # second home ------------------------------------------------
-fyrst_married %>%
+plot_data %>%
   filter(ownership) %>%
   tbl_cross(row = "ownership_husb_father",
             col = "secondhome",
@@ -101,9 +120,12 @@ predictors <-
     ,"ownership_husb_father"
   )
 
-formula <-
-  formula(paste("hh_income_logged ~",
-                paste(predictors %>% setdiff("hh_income_logged"), collapse = "+")))
+formula0 <-
+  formula(paste("subj_status ~",
+                paste(predictors, collapse = "+")))
+formula1 <-
+  formula(paste("consumption_logged ~",
+                paste(predictors, collapse = "+")))
 formula2 <-
   formula(paste("ownership_vehicle ~",
                 paste(predictors, collapse = "+")))
@@ -116,18 +138,25 @@ formula4 <-
 formula5 <-
   formula(paste("secondhome ~",
                 paste(predictors, collapse = "+"))) 
+formula5_5 <-
+  formula(paste("homevalue_other_logged ~",
+                paste(predictors, collapse = "+"))) 
 formula6 <-
   formula(paste("homevalue_total_logged ~",
                 paste(predictors, collapse = "+"))) 
 formula7 <-
-  formula(paste("homevalue_total_logged ~",
-                paste(predictors %>% c("secondhome"), collapse = "+"))) 
+  formula(paste("homevalue_total_logged ~ homevalue_other_logged +",
+                paste(predictors, collapse = "+"))) 
 
 jtools::export_summs(
-  # lm(
-  #   formula,
-  #   data = fyrst_married
-  # ),
+  lm(
+    formula0,
+    data = fyrst_married
+  ),
+  lm(
+    formula1,
+    data = fyrst_married
+  ),
   glm(
     formula2,
     data = fyrst_married,
@@ -146,6 +175,10 @@ jtools::export_summs(
     formula5,
     data = fyrst_married %>% filter(ownership),
     family = "binomial"
+  ),
+  lm(
+    formula5_5,
+    data = fyrst_married %>% filter(secondhome)
   ),
   lm(
     formula6,

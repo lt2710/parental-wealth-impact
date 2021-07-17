@@ -252,8 +252,34 @@ fyrst_raw_mutated = fyrst_raw %>%
     # party_sps_mother = e1804 == "1",
     # household
     hh_income = as.numeric(k2),
-    hh_income_logged = log(hh_income+1),
+    hh_income_logged = log(hh_income+50),
+    subj_status = 6 - k4 %>% as.numeric(),
     ownership_vehicle = k5 == 1,
+    consumption = (as.numeric(k7a) + 
+      as.numeric(k7b) + 
+      as.numeric(k7c) + 
+      as.numeric(k7d) + 
+      as.numeric(k7e) + 
+      as.numeric(k7f) + 
+      as.numeric(k7g) + 
+      as.numeric(k7h) + 
+      as.numeric(k7i) + 
+      as.numeric(k7j) + 
+      as.numeric(k7k) + 
+      as.numeric(k7l) +
+        12*(as.numeric(k6a) + 
+              as.numeric(k6b) + 
+              as.numeric(k6c) + 
+              as.numeric(k6d) + 
+              as.numeric(k6e) + 
+              as.numeric(k6f) + 
+              as.numeric(k6g) + 
+              as.numeric(k6h) + 
+              as.numeric(k6i) + 
+              as.numeric(k6j) + 
+              as.numeric(k6k))
+      ),
+    consumption_logged = log(consumption+50),
     areabuild = as.numeric(k1001),
     ownership =  k11%in%c("1","2","3","4"),
     year_obtained_before_marriage = as.numeric(e7_y) - as.numeric(k1401),
@@ -267,11 +293,20 @@ fyrst_raw_mutated = fyrst_raw %>%
     homevalue_other = ifelse(as.numeric(k2002)>1000,
                              as.numeric(k2002)/10000,
                              as.numeric(k2002)),
+    homevalue_other_logged = log(homevalue_other+1),
     homevalue_total = homevalue + homevalue_other,
     homevalue_total_logged = log(homevalue_total+1),
     # called father but actually parent
-    ownership_res_father = k21 == "2",
-    ownership_sps_father = k22 == "2"
+    ownership_res_father = ifelse(k21 == "2",
+                                  k21v%>%
+                                    as.numeric()%>%
+                                    na_if(6565),
+                                  0),
+    ownership_sps_father = ifelse(k22 == "2",
+                                  k22v%>%
+                                    as.numeric()%>%
+                                    na_if(65),
+                                  0)
   )
 
 # key school education
@@ -368,9 +403,9 @@ fyrst_to_impute <-
 # perform imputation
 fyrst_object = fyrst_to_impute %>%
   mice::mice(
-    m = 5,
+    m = 1,
     method = "rf",
-    maxit = 5,
+    maxit = 30,
     seed = 999
   )
 fyrst = fyrst_object %>%

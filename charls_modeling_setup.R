@@ -61,24 +61,25 @@ charls_filtered_sampled <- charls_filtered %>%
 # impute --------------------------
 charls_to_impute <- charls_filtered_sampled %>% 
   mutate(homevalue = ifelse(ownership, homevalue, 0),
-         marriagehomevalue = ifelse(marriagehome, marriagehomevalue, 0))
-charls_filtered_sampled_imputed = charls_to_impute %>%
+         marriagehomevalue = ifelse(marriagehome, marriagehomevalue, 0),
+         marriagegiftvalue = ifelse(marriagegift, marriagegiftvalue, 0))
+charls_filtered_sampled_imputed_object <- charls_to_impute %>%
   mice::mice(
-    m = 5,
+    m = 1,
     method = "rf",
-    maxit = 5,
+    maxit = 30,
     seed = 999
-  ) %>%
-  mice::complete(action = 1)
+  )
+charls_filtered_sampled_imputed <- mice::complete(charls_filtered_sampled_imputed_object, action = 1)
 
 # mutate ---------------------------------
 charls_filtered_sampled_imputed_mutated <- charls_filtered_sampled_imputed %>% # use charls_to_impute if no impute
   mutate(
-    asset_fin = pmax(asset_fin, 0),
     asset_total = (asset_home  +
                      asset_fin +
                      asset_land +
-                     asset_durable_fixed) %>% pmax(0), 
+                     asset_durable_fixed), 
+    asset_other = (asset_land + asset_durable_fixed),
     job = 8 - (job %>% as.numeric()),
     job_spouse = 8 - (job_spouse %>% as.numeric()),
     income_logged = log(income + 50),
@@ -109,9 +110,12 @@ charls_filtered_sampled_imputed_mutated <- charls_filtered_sampled_imputed %>% #
       "asset_land",
       "asset_durable_fixed",
       "asset_home",
-      "asset_total"
+      "asset_total",
+      "asset_other",
+      "marriagehomevalue",
+      "marriagegiftvalue"
     ),
-    .funs = list(logged = ~ log(. + 1))
+    .funs = list(logged = ~ log(pmax(., 0) + 1))
   ) %>%
   mutate_at(
     c(
@@ -120,9 +124,12 @@ charls_filtered_sampled_imputed_mutated <- charls_filtered_sampled_imputed %>% #
       "asset_land",
       "asset_durable_fixed",
       "asset_home",
-      "asset_total"
+      "asset_total",
+      "asset_other",
+      "marriagehomevalue",
+      "marriagegiftvalue"
     ),
-    .funs = list(flag = ~ ifelse(. <= 0,
+    .funs = list(flag = ~ ifelse(. < 0,
                                  1,
                                  0))
   ) 

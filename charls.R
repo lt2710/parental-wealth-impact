@@ -330,10 +330,6 @@ work_merged %>% head()
 psu <- read.dta13("CHARLS2013/PSU.dta",
                   fromEncoding = "GB2312",
                   convert.factors = FALSE)
-#city name missalinius
-psu$city[psu$city=="北京"]<-"北京市"
-psu$city[psu$city=="哈尔滨"]<-"哈尔滨市"
-psu$city[psu$city=="天津市"]<-"天津市"
 #a new tier variable
 psu$tier <- NA
 psu$tier[psu$city %in% list_tier1] <- "1st tier"
@@ -877,7 +873,7 @@ transfer_raw_2018 <-
 marriage_home <- transfer_raw_2018%>%
   select(hhid = householdID,
          ce069_w2_1_1_:ce069_w2_1_15_) %>%
-  gather(column, value, -hhid, ) %>%
+  gather(column, value, -hhid) %>%
   mutate(childid = column %>%
            str_extract("_[:digit:]+_$")%>%
            str_extract("[:digit:]+") %>%
@@ -890,7 +886,7 @@ marriage_home <- transfer_raw_2018%>%
 marriage_homevalue <- transfer_raw_2018%>%
   select(hhid = householdID,
          ce070_w2_1_1_:ce070_w2_1_9_) %>%
-  gather(column, value, -hhid, ) %>%
+  gather(column, value, -hhid) %>%
   mutate(childid = column %>%
            str_extract("_[:digit:]+_$")%>%
            str_extract("[:digit:]+") %>%
@@ -904,12 +900,40 @@ marriage_homevalue <- transfer_raw_2018%>%
             childid = childid %>% as.numeric(),
             marriagehomevalue = value)
 
+#gift upon marriage
+marriage_gift <- transfer_raw_2018%>%
+  select(hhid = householdID,
+         ce067_w2_1_1_:ce067_w2_1_15_) %>%
+  gather(column, value, -hhid) %>%
+  mutate(childid = column %>%
+           str_extract("_[:digit:]+_$")%>%
+           str_extract("[:digit:]+") %>%
+           as.numeric()) %>%
+  transmute(hhid = hhid %>% as.numeric(), 
+            childid = childid %>% as.numeric(),
+            marriagegift = value == "1 Yes")
+
+#gift value upon marriage
+marriage_giftvalue <- transfer_raw_2018%>%
+  select(hhid = householdID,
+         ce068_w2_1_1_:ce068_w2_1_15_) %>%
+  gather(column, value, -hhid) %>%
+  mutate(childid = column %>%
+           str_extract("_[:digit:]+_$")%>%
+           str_extract("[:digit:]+") %>%
+           as.numeric()) %>%
+  transmute(hhid = hhid %>% as.numeric(), 
+            childid = childid %>% as.numeric(),
+            marriagegiftvalue = value/10000)
+
 
 ## ----------------------------------------------------------------------------------------------------------------------------------
 child <-
   child_2018 %>%
   left_join(marriage_home, by = c("hhid","childid")) %>%
-  left_join(marriage_homevalue, by = c("hhid","childid")) 
+  left_join(marriage_homevalue, by = c("hhid","childid")) %>%
+  left_join(marriage_gift, by = c("hhid","childid")) %>%
+  left_join(marriage_giftvalue, by = c("hhid","childid")) 
 
 child %>% head()
 

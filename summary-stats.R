@@ -33,31 +33,54 @@ vars =
     "job_parent",
     "asset_total",
     "asset_total_logged",
-    "marriagehome")
+    "asset_fin",
+    "asset_fin_logged",
+    "asset_home",
+    "asset_home_logged",
+    "asset_other",
+    "asset_other_logged",
+    "marriagehome",
+    "marriagehomevalue",
+    "marriagehomevalue_logged",
+    "marriagegift",
+    "marriagegiftvalue",
+    "marriagegiftvalue_logged",
+    "tier_parent")
 charls_for_summary = charls %>%
+  filter(male, married) %>%
   mutate(job_public = job == 7) %>%
   select(all_of(vars)) %>%
   mutate_at(
-    c("asset_total_logged", "asset_total", "education_years"),
+    c(
+      "asset_total",
+      "asset_total_logged",
+      "asset_fin",
+      "asset_fin_logged",
+      "asset_home",
+      "asset_home_logged",
+      "asset_other",
+      "asset_other_logged",
+      "education_years"
+    ),
     as.numeric
   )
 # make table
 cbind(
   gtsummary::tbl_summary(
-    charls_for_summary,
+    charls_for_summary %>% filter(tier_parent%in%c("2nd tier","3rd tier")),
     type = format_type,
     statistic = format_statistic,
     missing = "no"
   ) %>% as.tibble(),
   gtsummary::tbl_summary(
-    charls_for_summary %>% filter(male, married),
+    charls_for_summary %>% filter(tier_parent%in%c("4th tier")),
     type = format_type,
     statistic = format_statistic,
     missing = "no"
   ) %>% as.tibble()
 ) %>% write.csv(file.path("output",paste0("charls_summary.csv")))
 
-# fyrst all --------------
+# fyrst married --------------
 # variables
 vars = 
   c("age_res",
@@ -73,47 +96,19 @@ vars =
     "homevalue",
     "homevalue_logged",
     "secondhome",
+    "homevalue_other",
+    "homevalue_other_logged",
     "homevalue_total",
     "homevalue_total_logged",
     "ownership_vehicle",
+    "subj_status",
+    "consumption",
+    "consumption_logged",
     "urbanhukou_res_father",
     "party_res_father",
     "education_years_res_father",
     "job_res_father",
     "ownership_res_father")
-fyrst_for_summary = fyrst %>%
-  select(all_of(vars))
-gtsummary::tbl_summary(
-  fyrst_for_summary,
-  type = format_type,
-  statistic = format_statistic,
-  missing = "no"
-) %>% 
-  as.tibble() %>% 
-  write.csv(file.path("output", paste0("fyrst_summary_all.csv")))
-
-# fyrst married --------------
-# variables
-vars = 
-  c("age_husb", 
-    "education_years_husb",
-    "urbanhukou_husb",
-    "party_husb",
-    "job_husb", 
-    "hh_income",
-    "hh_income_logged",
-    "ownership",
-    "homevalue",
-    "homevalue_logged",
-    "secondhome",
-    "homevalue_total",
-    "homevalue_total_logged",
-    "ownership_vehicle",
-    "urbanhukou_husb_father",
-    "party_husb_father",
-    "education_years_husb_father",
-    "job_husb_father",
-    "ownership_husb_father")
 fyrst_for_summary = fyrst_married %>%
   select(all_of(vars))
 gtsummary::tbl_summary(
