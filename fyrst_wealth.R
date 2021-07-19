@@ -197,3 +197,32 @@ jtools::export_summs(
 #      tobit(Lower  = 1),
 #      data = fyrst_married) %>%
 #   summary()
+
+library(lavaan)
+library(semPlot)
+# model 1 - canonical mimic model
+model1 <- paste(
+  # measurement model
+  "living_standard =~ ownership_vehicle + ownership + subj_status",
+  paste("living_standard ~",
+        paste(predictors, collapse = "+")),
+  sep = " \n"
+)
+
+# run lavaan
+fit1 <- lavaan::sem(model1, data=fyrst_married)
+summary(fit1)
+jtools::export_summs(
+  fit1,
+  error_pos = "same",
+  to.file = "xlsx",
+  file.name = file.path("output",paste0("fyrst_wealth_sem.xlsx"))
+  )
+semPlot::semPaths(fit1, 
+                  what = "path", 
+                  whatLabels = "est", 
+                  style = "OpenMx",
+                  layout = "tree",
+                  intercepts = F,
+                  residuals = F, 
+                  thresholds = F)

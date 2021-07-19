@@ -119,3 +119,34 @@ gtsummary::tbl_summary(
 ) %>% 
   as.tibble() %>% 
   write.csv(file.path("output", paste0("fyrst_summary_married.csv")))
+
+# wealth by tier ---------------------------------------------------------------
+# make data
+plot_data = charls_married %>%
+  filter(ownership, tier_parent!= "1st tier") %>%
+  mutate(tier_parent = recode(tier_parent,
+                              "2nd tier" = "2 Large and Medium Cities",
+                              "3rd tier" = "2 Large and Medium Cities",
+                              "4th tier" = "3 Small Cities")) %>%
+  group_by(tier_parent) %>%
+  summarise(num = n(), 
+            "Median Home Wealth" = median(homevalue*10000, na.rm = T),
+            "Median Parental Net Wealth" = median(asset_total, na.rm = T)) %>%
+  add_row(tier_parent= "1 Shanghai",
+          num = nrow(fyrst_married),
+          "Median Home Wealth" = median(fyrst_married$homevalue_total*10000, na.rm = T) * 1.67,
+          "Median Parental Net Wealth" =  NA) %>%
+  gather(key = "type", value = "metric", - num, -tier_parent)
+# plot
+ggplot(aes(x = tier_parent,
+           y = metric,
+           group = type,
+           color = type),
+       data = plot_data) +
+  geom_point() + 
+  geom_line()  +
+  xlab("") +
+  ylim(0, 1800000) +
+  ylab("(in CNY)") +
+  labs(color = "") +
+  theme_classic()
