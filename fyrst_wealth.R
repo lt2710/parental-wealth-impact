@@ -2,24 +2,6 @@ fyrst_married = fyrst_mutated_filtered %>%
   filter(married_res == TRUE) 
 plot_data = fyrst_married %>%
   mutate(
-    ownership_husb_father = ownership_husb_father %>% pmin(2) %>% as.character(),
-    ownership_wife_father = ownership_wife_father %>% pmin(2) %>% as.character(),
-    diploma_husb = case_when(
-      education_years_husb %in% c(0:12) ~ "1 <= Senior High",
-      education_years_husb %in% c(15:22) ~ "2 Tertiary & Above",
-    ),
-    diploma_husb_father = case_when(
-      education_years_husb_father %in% c(0:9) ~ "1 <= Junior High",
-      education_years_husb_father %in% c(11:22) ~ "2 Senior High & Above",
-    ),
-    diploma_wife = case_when(
-      education_years_wife %in% c(0:12) ~ "1 <= Senior High",
-      education_years_wife %in% c(15:22) ~ "2 Tertiary & Above",
-    ),
-    diploma_wife_father = case_when(
-      education_years_wife_father %in% c(0:9) ~ "1 <= Junior High",
-      education_years_wife_father %in% c(11:22) ~ "2 Senior High & Above",
-    ),
     income_quant = cut(
       hh_income,
       breaks = quantile(
@@ -28,14 +10,10 @@ plot_data = fyrst_married %>%
         na.rm = T
       )
     )
-    ,
-    income_high = hh_income > quantile(fyrst_married$hh_income,
-                                       probs = 0.8,
-                                       na.rm = T)
   )
 # ownership------------------------------------------------------------
 plot_data %>%
-  tbl_cross(row = "ownership_husb_father",
+  tbl_cross(row = "ownership_husb_father_cat",
             col = "ownership",
             percent = "row",
             missing = "ifany") %>%
@@ -52,6 +30,9 @@ plot_data %>%
   add_p()%>%
   as_tibble()%>%
   write.csv(file.path("output",paste0("fyrst_homogamy_edu.csv")))
+cor(plot_data$education_years_husb,
+    plot_data$education_years_wife,
+    method = "spearman")
 
 plot_data %>%
   tbl_cross(row = "diploma_husb_father",
@@ -61,51 +42,58 @@ plot_data %>%
   add_p()%>%
   as_tibble()%>%
   write.csv(file.path("output",paste0("fyrst_homogamy_edu_parent.csv")))
+cor(plot_data$education_years_husb_father,
+    plot_data$education_years_wife_father,
+    method = "spearman")
 
-select(
-  plot_data,
-  ownership_husb_father,
-  ownership_wife_father
-) %>%
-  tbl_cross(row = "ownership_husb_father",
-            col = "ownership_wife_father",
+plot_data %>%
+  tbl_cross(row = "ownership_husb_father_cat",
+            col = "ownership_wife_father_cat",
             percent = "cell",
             missing = "ifany") %>%
   add_p()%>%
   as_tibble()%>%
   write.csv(file.path("output",paste0("fyrst_homogamy_home.csv")))
-
-# home value ------------------------------------------------------------
-# make data
-plot_data_small = plot_data %>%
-  filter(!is.na(homevalue)) %>%
-  group_by(ownership_husb_father, income_quant) %>%
-  summarise(num = n(),
-            metric = median(homevalue, na.rm = T)) %>%
-  drop_na()
-# plot
-ggplot(aes(x = income_quant,
-           y = metric,
-           group = ownership_husb_father,
-           color = ownership_husb_father),
-       data = plot_data_small) +
-  geom_point() + 
-  geom_line()  +
-  xlab("Income Level") +
-  ylab("Median Home Wealth") +
-  labs(color = "Number of Parental Homes") +
-  theme_classic()
+cor(plot_data$ownership_husb_father,
+    plot_data$ownership_wife_father,
+    method = "spearman")
 
 # second home ------------------------------------------------
 plot_data %>%
   filter(ownership) %>%
-  tbl_cross(row = "ownership_husb_father",
+  tbl_cross(row = "ownership_husb_father_cat",
             col = "secondhome",
             percent = "row",
             missing = "ifany") %>%
   add_p()%>%
   as_tibble()%>%
   write.csv(file.path("output",paste0("fyrst_secondhome.csv")))
+
+# plot
+plot_data = fyrst_married %>%
+  filter(ownership) %>%
+  transmute(
+    secondhome = secondhome,
+    `Owner-Occupied Home` = homevalue,
+    `Additional Home` = homevalue_other
+  ) %>%
+  gather(key = "varname",
+         value = "value",-secondhome) %>%
+  group_by(secondhome, varname) %>%
+  summarise(mean_value = mean(value)) %>%
+  ungroup()
+
+ggplot(aes(x = secondhome,
+           y = mean_value,
+           fill = varname),
+       data = plot_data) +
+  geom_bar(position="stack", 
+           stat="identity",
+           color = "black") +
+  xlab("Having Second/Additional Home") +
+  ylab("Total Value of Homes (Group Average. In CNY 10k)") +
+  labs(fill = "Asset Type") +
+  theme_classic()
 
 # modeling ----------------------------------
 predictors <-
@@ -145,7 +133,7 @@ formula6 <-
   formula(paste("homevalue_total_logged ~",
                 paste(predictors, collapse = "+"))) 
 formula7 <-
-  formula(paste("homevalue_total_logged ~ homevalue_other_logged +",
+  formula(paste("homevalue_total_logged ~ secondhome +",
                 paste(predictors, collapse = "+"))) 
 
 jtools::export_summs(

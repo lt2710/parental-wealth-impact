@@ -129,21 +129,11 @@ charls_filtered_sampled_imputed_mutated <- charls_filtered_sampled_imputed %>% #
       "marriagehomevalue",
       "marriagegiftvalue"
     ),
-    .funs = list(flag = ~ ifelse(. < 0,
+    .funs = list(flag = ~ ifelse(. <= 0,
                                  1,
                                  0))
   ) 
 # final mutate
-charls = charls_filtered_sampled_imputed_mutated %>%
-  mutate(
-    asset_total_quant = cut(
-      asset_total,
-      breaks = quantile(
-        charls_filtered_sampled_imputed_mutated$asset_total,
-        probs = seq(0, 1, 0.25),
-        na.rm = T
-      )
-    )
-  )
+charls = charls_filtered_sampled_imputed_mutated
 # save
 save(charls, file = "output/charls.RData")

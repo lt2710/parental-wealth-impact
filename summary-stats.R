@@ -1,3 +1,52 @@
+# number of homes -----------------------------
+joint_home = rbind(
+  fyrst_married %>%
+    transmute(
+      tier = "1. Shanghai",
+      homevalue = homevalue,
+      num_home_cat = ownership_husb_father_cat
+    ),
+  charls_for_plot %>%
+    select(tier,
+           homevalue,
+           num_home_cat)
+)
+
+joint_home %>% 
+  filter(homevalue>0) %>%
+  group_by(tier) %>%
+  summarise(n(),
+            mean(homevalue),
+            sd(homevalue),
+            quantile(homevalue, 0.25),
+            quantile(homevalue, 0.5),
+            quantile(homevalue, 0.75)
+            ) %>%
+  as_tibble()%>%
+  write.csv(file.path("output",paste0("joint_homevalue.csv")))
+
+# num of homes on homevalue-----------------------------
+joint_homevalue = rbind(
+  joint_home %>%
+    filter(homevalue>0),
+  charls_plot %>%
+    select(tier,
+           homevalue,
+           num_home_cat)
+)
+# plot
+ggplot(aes(x = num_home_cat,
+           y = homevalue,
+           fill = tier),
+       data = joint_homevalue) +
+  geom_boxplot() +
+  xlab("Number of Parental Homes") +
+  ylab("Total Value of Homes (in CNY 10k)") +
+  scale_y_continuous(limits = c(0, 180)) +
+  theme_classic() +
+  theme(legend.position = "none") +
+  facet_wrap(~tier)
+
 # formats --------------------------
 format_statistic = list(
   all_continuous() ~ c("{mean} ({sd})",

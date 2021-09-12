@@ -33,5 +33,24 @@ select <- dplyr::select
 
 # filter married
 load("output/fyrst.RData")
-fyrst_mutated = fyrst %>% mutate()
+fyrst_mutated = fyrst %>% mutate(
+  ownership_husb_father_cat = ownership_husb_father %>% pmin(2) %>% factor(labels = c("0","1","2 or more")),
+  ownership_wife_father_cat = ownership_wife_father %>% pmin(2) %>% factor(labels = c("0","1","2 or more")),
+  diploma_husb = case_when(
+    education_years_husb %in% c(0:12) ~ "1 <= Senior High",
+    education_years_husb %in% c(15:22) ~ "2 Tertiary & Above",
+  ),
+  diploma_husb_father = case_when(
+    education_years_husb_father %in% c(0:9) ~ "1 <= Junior High",
+    education_years_husb_father %in% c(11:22) ~ "2 Senior High & Above",
+  ),
+  diploma_wife = case_when(
+    education_years_wife %in% c(0:12) ~ "1 <= Senior High",
+    education_years_wife %in% c(15:22) ~ "2 Tertiary & Above",
+  ),
+  diploma_wife_father = case_when(
+    education_years_wife_father %in% c(0:9) ~ "1 <= Junior High",
+    education_years_wife_father %in% c(11:22) ~ "2 Senior High & Above",
+  ),
+)
 fyrst_mutated_filtered = fyrst_mutated %>% filter()

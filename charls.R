@@ -697,13 +697,22 @@ for (i in 1:11){
     )
 }
 
-# sum rowwise columns
+# function to recode home number
+recoding = function(var) {
+  return(ifelse(var > 0,
+                1,
+                0))
+}
 
+# sum rowwise columns
 hh_house_2018 = hh_house_2018 %>%
-  mutate(asset_home = select(., old_property_1:new_property_11) %>% rowSums() * 10000 )
-hh_homevalue = hh_house_2018 %>%
+  mutate(asset_home = select(., old_property_1:new_property_11) %>% rowSums() * 10000,
+         num_home = select(., old_property_1:new_property_11) %>% mutate_all(recoding) %>% rowSums()
+        )
+ hh_homevalue = hh_house_2018 %>%
   select(hhid,
-         asset_home)
+         asset_home,
+         num_home)
 
 ## ----------------------------------------------------------------------------------------------------------------------------------
 parent_hh <-

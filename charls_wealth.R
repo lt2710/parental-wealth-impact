@@ -32,15 +32,9 @@ packages <- lapply(
 select <- dplyr::select
 # eda ---------------------------------- 
 load("output/charls.RData")
-
-charls_married <- filter(charls
-                         ,married
-                         ,male
-                         ,tier_parent%in%c("2nd tier","3rd tier")
-                         #,tier_parent%in%c("4th tier")
-                         )
-charls_married = charls_married %>%
+charls = charls %>%
   mutate(
+    num_home_cat = num_home%>%pmin(2)%>%factor(labels = c("0","1","2 or more")),
     diploma = case_when(
       education_years %in% c(0:12) ~ "1 up to high",
       education_years %in% c(15:22) ~ "2 tertiary & above",
@@ -54,34 +48,28 @@ charls_married = charls_married %>%
       income %in% c(0:40000) ~ "2",
       income %in% c(75000:75000) ~ "3",
       income %in% c(125000:500000) ~ "4",
-    )
-    ,
+    ),
     # public sector manager job
     job_public = job == 7
   )
-# parental wealth ---------------------------------------------------------------
-# make data
-plot_data = charls_married %>%
-  group_by(asset_total_quant) %>%
-  summarise(num = n(),
-            median_asset_fin = median(asset_fin, na.rm = T),
-            median_asset_other = median(asset_other, na.rm = T),
-            median_asset_home = median(asset_home, na.rm = T),
-            median_asset_total = median(asset_total, na.rm = T)) %>%
-  gather(key = "type", value = "metric", - num, -asset_total_quant) %>%
-  drop_na()
-# plot
-ggplot(aes(x = asset_total_quant,
-           y = metric,
-           group = type,
-           color = type),
-       data = plot_data) +
-  geom_point() + 
-  geom_line()  +
-  xlab("Parental Net Worth Quantile") +
-  ylab("Median of Wealth Components (CNY)") +
-  labs(color = "") +
-  theme_classic()
+charls_married <- filter(charls
+                         ,married
+                         ,male
+                         ,tier_parent%in%c("2nd tier","3rd tier")
+                         #,tier_parent%in%c("4th tier")
+                         )
+charls_married = charls_married %>%
+  mutate(
+    asset_total_quant = cut(
+      asset_total,
+      breaks = quantile(
+        charls_married$asset_total,
+        probs = seq(0, 1, 0.25)
+      ),
+      labels = c("0-25%","25-50%","50-75%","75-100%"),
+      include.lowest=TRUE
+    )
+  )
 # ownership ---------------------------------------------------------------
 charls_married %>%
   tbl_cross(row = "asset_total_quant",
@@ -91,6 +79,15 @@ charls_married %>%
   add_p()%>%
   as_tibble()%>%
   write.csv(file.path("output",paste0("charls_ownership.csv")))
+
+charls_married %>%
+  tbl_cross(row = "num_home_cat",
+            col = "ownership",
+            percent = "row",
+            missing = "ifany") %>%
+  add_p()%>%
+  as_tibble()%>%
+  write.csv(file.path("output",paste0("charls_ownership1.csv")))
 # marriage homogamy ------------------------------------------------
 charls_married %>%
   tbl_cross(row = "diploma",
@@ -100,31 +97,43 @@ charls_married %>%
   add_p()%>%
   as_tibble()%>%
   write.csv(file.path("output",paste0("charls_homogamy.csv")))
+cor(charls_married$education_years,
+    charls_married$education_years_spouse,
+    method = "spearman")
 
 # home value ---------------------------------------------------------------
-# make data
-plot_data = charls_married %>%
-  filter(ownership) %>% 
-  group_by(asset_total_quant, income_cat) %>%
-  summarise(num = n(),
-            metric = median(homevalue, na.rm = T)) %>%
-  drop_na()
-# plot
-ggplot(aes(x = income_cat,
-           y = metric,
-           group = asset_total_quant,
-           color = asset_total_quant),
-       data = plot_data) +
-  geom_point() + 
-  geom_line()  +
-  xlab("Income Level") +
-  ylab("Median Home Wealth") +
-  labs(color = "Parental Net Worth") +
+charls_for_plot = charls %>%
+  filter(tier_parent != "1st tier",
+         married,
+         male) %>%
+  mutate(tier = ifelse(
+    tier_parent %in% c("2nd tier", "3rd tier"),
+    "2. Other Large/Medium Cities",
+    "3. Small Cities"
+  ))
+charls_plot = charls_for_plot %>%
+  filter(homevalue_logged > 0,
+         asset_total_logged > 0)
+# net worth
+ggplot(
+  aes(x = asset_total_logged,
+      y = homevalue_logged,
+      color = tier),
+  data = charls_plot
+  ) +
+  geom_jitter(alpha = 0.5,
+              width = 0.25,
+              height = 0.25) +
+  geom_smooth(method = 'lm', se = FALSE) +
+  xlab("Parental Net Worth (Logged)") +
+  ylab("Total Value of Homes (Logged)") +
+  labs(color = "City Size") +
   theme_classic()
 
 # marriage home ------------------------------------------------
 charls %>% 
-  filter(married) %>%
+  filter(married
+         ,tier_parent%in%c("2nd tier","3rd tier")) %>%
   tbl_cross(row = "male",
             col = "marriagehome",
             percent = "row",
@@ -133,52 +142,10 @@ charls %>%
   as_tibble()%>%
   write.csv(file.path("output",paste0("charls_marriagehome.csv")))
 
-# make data
-plot_data = charls_married %>%
-  filter(ownership) %>% 
-  group_by(marriagehome, income_cat) %>%
-  summarise(num = n(),
-            metric = median(homevalue, na.rm = T)) %>%
-  drop_na()
-# plot
-ggplot(aes(x = income_cat,
-           y = metric,
-           group = marriagehome,
-           color = marriagehome),
-       data = plot_data) +
-  geom_point() + 
-  geom_line()  +
-  xlab("Income Level") +
-  ylab("Median Home Wealth") +
-  labs(color = "Gifted Home Upon Marriage") +
-  theme_classic()
-
-# make data
-plot_data = charls_married %>%
-  filter(marriagehome) %>% 
-  group_by(asset_total_quant) %>%
-  summarise(num = n(),
-            median_homevalue = median(homevalue, na.rm = T),
-            median_marriagehomevalue = median(marriagehomevalue, na.rm = T),
-            marriagegiftvalue = median(marriagegiftvalue, na.rm = T)) %>%
-  gather(key = "type", value = "metric", - num, -asset_total_quant) %>%
-  drop_na()
-# plot
-ggplot(aes(x = asset_total_quant,
-           y = metric,
-           group = type,
-           color = type),
-       data = plot_data) +
-  geom_point() + 
-  geom_line()  +
-  xlab("Parental Net Worth Level") +
-  ylab("Median Home Wealth") +
-  labs(color = "") +
-  theme_classic()
-
 # marriage gift ------------------------------------------------
 charls %>% 
-  filter(married) %>%
+  filter(married
+         ,tier_parent%in%c("2nd tier","3rd tier")) %>%
   tbl_cross(row = "male",
             col = "marriagegift",
             percent = "row",
@@ -187,24 +154,16 @@ charls %>%
   as_tibble()%>%
   write.csv(file.path("output",paste0("charls_marriagegift.csv")))
 
-# make data
-plot_data = charls_married %>%
-  filter(ownership) %>% 
-  group_by(marriagegift, income_cat) %>%
-  summarise(num = n(),
-            metric = median(homevalue, na.rm = T)) %>%
-  drop_na()
 # plot
-ggplot(aes(x = income_cat,
-           y = metric,
-           group = marriagegift,
-           color = marriagegift),
-       data = plot_data) +
-  geom_point() + 
-  geom_line()  +
-  xlab("Income Level") +
-  ylab("Median Home Wealth") +
-  labs(color = "Other Marriage Gifts") +
+ggplot(aes(x = marriagehome,
+           y = homevalue,
+           fill = marriagegift),
+       data = charls_married %>% filter(ownership)) +
+  geom_boxplot(outlier.shape = NA) +  
+  xlab("Receiving A Home as Gift") +
+  ylab("Total Value of Homes (in CNY 10k)") +
+  labs(fill = "Receiving Other Material Gifts") +
+  scale_y_continuous(limits = c(0, 200)) +
   theme_classic()
 
 # modeling ------------------------------------------------------
@@ -237,20 +196,24 @@ formula2_2 <-
 formula3 <-
   formula(paste("ownership ~",
                 paste(predictors,collapse = "+")))
+formula3a <-
+  formula(paste("ownership ~ asset_fin_logged + asset_fin_flag + asset_home_logged + asset_home_flag + asset_other_logged +",
+                paste(predictors %>% 
+                        setdiff("asset_total_logged"),
+                      collapse = "+")))
 formula4 <-
   formula(paste("homevalue_logged ~ ",
                 paste(predictors,collapse = "+")))
 formula5 <-
-  formula(paste("homevalue_logged ~ asset_fin_logged + asset_fin_flag + asset_home_logged + asset_other_logged +",
+  formula(paste("homevalue_logged ~ asset_fin_logged + asset_fin_flag + asset_home_logged + asset_home_flag + asset_other_logged +",
                 paste(predictors %>% 
-                        setdiff(c("asset_total_logged",
-                                  "asset_total_logged:tier_4th")),
+                        setdiff("asset_total_logged"),
                       collapse = "+")))
 formula6 <-
   formula(paste("homevalue_logged ~ marriagegift +  marriagehome +",
                 paste(predictors,collapse = "+")))
 formula7 <-
-  formula(paste("homevalue_logged ~ marriagegiftvalue_logged + marriagehomevalue_logged + ",
+  formula(paste("homevalue_logged ~ marriagegiftvalue_flag + marriagegiftvalue_logged + marriagehomevalue_flag + marriagehomevalue_logged + ",
                 paste(predictors,collapse = "+")))
 
 jtools::export_summs(
@@ -259,6 +222,11 @@ jtools::export_summs(
     data = charls_married,
     family = "binomial"
   ), 
+  glm(
+    formula3a,
+    data = charls_married,
+    family = "binomial"
+  ),
   lm(
     formula4,
     data = charls_married %>% filter(ownership)
@@ -271,7 +239,7 @@ jtools::export_summs(
     formula1,
     data = charls_married,
     family = "binomial"
-  ), 
+  ),
   lm(
     formula1_2,
     data = charls_married %>% filter(marriagegift)
@@ -280,7 +248,7 @@ jtools::export_summs(
     formula2,
     data = charls_married,
     family = "binomial"
-  ), 
+  ),
   lm(
     formula2_2,
     data = charls_married %>% filter(marriagehome)
